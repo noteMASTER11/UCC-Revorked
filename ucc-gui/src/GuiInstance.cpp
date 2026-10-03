@@ -7,8 +7,14 @@
 
 namespace ucc {
 namespace {
+#ifdef UCC_READ_ONLY_PREVIEW
+constexpr auto service = "com.uniwill.UccGuiPreview";
+constexpr auto path = "/com/uniwill/UccGuiPreview";
+#else
 constexpr auto service = "com.uniwill.UccGui";
 constexpr auto path = "/com/uniwill/UccGui";
+#endif
+constexpr auto interfaceName = "com.uniwill.UccGui";
 }
 
 GuiInstance::~GuiInstance() {
@@ -34,7 +40,7 @@ GuiInstance::Result GuiInstance::startOrActivate() {
     return Result::Primary;
   }
   bus.unregisterObject(path);
-  const auto request = QDBusMessage::createMethodCall(service, path, service, "Activate");
+  const auto request = QDBusMessage::createMethodCall(service, path, interfaceName, "Activate");
   const auto reply = bus.call(request, QDBus::Block, 3000);
   if (reply.type() == QDBusMessage::ErrorMessage) {
     qWarning() << "Could not activate the existing GUI:" << reply.errorMessage();

@@ -53,7 +53,7 @@ public:
                           ProfileManager *profileManager,
                           bool waterCoolerSupported,
                           QWidget *parent = nullptr );
-  ~FanControlTab() override = default;
+  ~FanControlTab() override;
 
   // Accessors used by MainWindow
   QComboBox *fanProfileCombo() const { return m_fanProfileCombo; }
@@ -149,7 +149,7 @@ private:
   QDBusInterface *m_waterCoolerDbus = nullptr;
   QTimer *m_waterCoolerPollTimer = nullptr;
   bool m_isWcConnected = false;
-  QPushButton *m_waterCoolerEnableCheckBox = nullptr;
+  QCheckBox *m_waterCoolerEnableCheckBox = nullptr;
   QComboBox *m_pumpVoltageCombo = nullptr;
   QCheckBox *m_ledOnOffCheckBox = nullptr;
   QPushButton *m_colorPickerButton = nullptr;

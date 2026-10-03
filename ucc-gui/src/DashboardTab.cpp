@@ -14,6 +14,16 @@
  */
 
 #include "DashboardTab.hpp"
+#include "FluentToggle.hpp"
+#include "PreviewMode.hpp"
+#include <QLineEdit>
+#include <QStandardItemModel>
+#include "FluentTheme.hpp"
+#include <QListWidget>
+#include "HardwareTab.hpp"
+#include <QScrollArea>
+#include <QTabWidget>
+#include <tuple>
 #include "SystemMonitor.hpp"
 #include "ProfileManager.hpp"
 #include <QDBusInterface>
@@ -96,6 +106,9 @@ DashboardTab::DashboardTab( SystemMonitor *systemMonitor, ProfileManager *profil
   {
     m_waterCoolerPollTimer = new QTimer(this);
     connect(m_waterCoolerPollTimer, &QTimer::timeout, this, &DashboardTab::updateWaterCoolerStatus);
+    readUccdAsync(this,"IsWaterCoolerEnabled",{},[this](std::optional<QVariant> value){
+      if(value){setWaterCoolerEnabled(value->toBool());updateWaterCoolerStatus();}
+    });
     m_waterCoolerPollTimer->start(2000);
     updateWaterCoolerStatus();
   }
@@ -103,280 +116,115 @@ DashboardTab::DashboardTab( SystemMonitor *systemMonitor, ProfileManager *profil
 
 void DashboardTab::setupUI()
 {
-  // Do not force a static background or text color here; allow the application's
-  // palette/theme to control colors so the UI remains readable in all themes.
-  QVBoxLayout *layout = new QVBoxLayout( this );
-  layout->setContentsMargins( 20, 20, 20, 20 );
-  layout->setSpacing( 20 );
-
-  // Resolve palette colors once and reuse as explicit hex values so the
-  // applied styles have consistent contrast in both light and dark themes.
-  QPalette pal = this->palette();
-  const QString textHex = pal.color(QPalette::WindowText).name();
-  const QString midHex = pal.color(QPalette::Mid).name();
-  const QString highlightHex = pal.color(QPalette::Highlight).name();
-  const QString linkHex = pal.color(QPalette::Link).name();
-  const QColor windowBg = pal.color(QPalette::Window);
-  // Choose a high-contrast inner text color based on window background
-  const QString innerTextHex = (windowBg.value() < 128) ? QString("#ffffff") : QString("#000000");
-  m_ringColorHex = QString("#d32f2f");  // Red for disconnected state and other alerts
-
-  // Title - use laptop model from daemon if available
-  // Use a grid so the title is centered over the full row width while
-  // the checkbox floats to the right edge, both occupying the same cell.
-  QGridLayout *titleLayout = new QGridLayout();
-  const QString titleText = m_laptopModel.isEmpty() ? QStringLiteral( "System Monitor" ) : m_laptopModel;
-  QLabel *titleLabel = new QLabel( titleText );
-  titleLabel->setStyleSheet( QString("font-size: 22px; font-weight: bold;") );
-
-  // Water Cooler Enable toggle button (synced with FanControlTab)
-  m_waterCoolerEnableCheckBox = new QPushButton( "Water Cooler" );
-  m_waterCoolerEnableCheckBox->setCheckable( true );
-  m_waterCoolerEnableCheckBox->setChecked( ucc::WATER_COOLER_INITIAL_STATE );
-  m_waterCoolerEnableCheckBox->setToolTip( tr( "When enabled the daemon will scan for water cooler devices" ) );
-  m_waterCoolerEnableCheckBox->setFixedHeight( 24 );
-
-  {
-    QPalette pal_ = this->palette();
-    const QString midHex_ = pal_.color(QPalette::Mid).name();
-    const QString enabledColorHex = QStringLiteral("#4caf50"); // green
-    const QString disabledColorHex = QStringLiteral("#d32f2f"); // red
-    m_waterCoolerEnableCheckBox->setStyleSheet(
-      QString("QPushButton { font-size: 11px; padding: 2px 16px; border: 1px solid %1; border-radius: 4px; background-color: %2; }"
-              "QPushButton:checked { background-color: %3; font-weight: bold; padding: 2px 12px; }")
-        .arg(midHex_, disabledColorHex, enabledColorHex) );
-  }
-
-  // Hide water cooler checkbox if water cooler not supported
-  if ( !m_waterCoolerSupported )
-  {
-    m_waterCoolerEnableCheckBox->setVisible( false );
-  }
-
-  // Both widgets share the same cell - title centered, checkbox right-aligned
-  titleLayout->addWidget( titleLabel,                0, 0, Qt::AlignCenter );
-  titleLayout->addWidget( m_waterCoolerEnableCheckBox, 0, 0, Qt::AlignRight | Qt::AlignVCenter );
-  layout->addLayout( titleLayout );
-
-  // Active Profile label (created but not shown; only used in status bar)
-  m_activeProfileLabel = new QLabel( "Loading..." );
-  m_activeProfileLabel->setStyleSheet( QString("font-weight: bold; color: %1;").arg(textHex) );
-  m_activeProfileLabel->setVisible( false );
-
-  // Water Cooler Status label (created but not shown; only used in status bar)
-  m_waterCoolerStatusLabel = new QLabel( "Disconnected" );
-  m_waterCoolerStatusLabel->setStyleSheet( QString("font-weight: bold; color: %1;").arg(m_ringColorHex) );
-  m_waterCoolerStatusLabel->setVisible( false );
-
-  // makeCard: compact value+unit+caption cell - no border (the panel provides it)
-  auto makeCard = [&]( const QString &caption, const QString &unit, QLabel *&valueLabel ) -> QWidget * {
-    QWidget *card = new QWidget();
-    QVBoxLayout *vl = new QVBoxLayout( card );
-    vl->setContentsMargins( 16, 16, 16, 14 );
-    vl->setSpacing( 6 );
-    vl->setAlignment( Qt::AlignCenter );
-
-    // Value + unit side-by-side, unit smaller and pushed to baseline
-    QWidget *valueRow = new QWidget();
-    QHBoxLayout *hl = new QHBoxLayout( valueRow );
-    hl->setContentsMargins( 0, 0, 0, 0 );
-    hl->setSpacing( 4 );
-    hl->setAlignment( Qt::AlignCenter );
-
-    valueLabel = new QLabel( "--" );
-    valueLabel->setStyleSheet( QString("font-size: 26px; font-weight: bold; color: %1; background: transparent; border: none;").arg(innerTextHex) );
-    valueLabel->setAlignment( Qt::AlignCenter );
-
-    QLabel *unitLabel = new QLabel( unit );
-    unitLabel->setStyleSheet( QString("font-size: 11px; color: %1; background: transparent; border: none; padding-top: 9px;").arg(innerTextHex) );
-    unitLabel->setAlignment( Qt::AlignVCenter );
-
-    hl->addWidget( valueLabel );
-    hl->addWidget( unitLabel );
-
-    QLabel *captionLabel = new QLabel( caption );
-    captionLabel->setStyleSheet( QString("font-size: 11px; color: %1; background: transparent; border: none;").arg(textHex) );
-    captionLabel->setAlignment( Qt::AlignCenter );
-
-    vl->addWidget( valueRow );
-    vl->addWidget( captionLabel );
-    return card;
+  auto *outer=new QVBoxLayout(this);outer->setContentsMargins(0,0,0,0);
+  auto *scroll=new QScrollArea(this);scroll->setWidgetResizable(true);outer->addWidget(scroll);
+  auto *body=new QWidget;scroll->setWidget(body);
+  auto *layout=new QVBoxLayout(body);layout->setContentsMargins(0,0,0,0);layout->setSpacing(16);
+  auto title=[](const QString &text){auto *label=new QLabel(text);label->setObjectName("cardTitle");return label;};
+  auto muted=[](const QString &text){auto *label=new QLabel(text);label->setObjectName("muted");label->setWordWrap(true);return label;};
+  auto value=[](QLabel *&label,const QString &unit,bool large){
+    auto *row=new QWidget;auto *l=new QHBoxLayout(row);l->setContentsMargins(0,0,0,0);l->setSpacing(5);
+    label=new QLabel("—");label->setObjectName(large ? "heroValue" : "metricValue");
+    l->addWidget(label,0,Qt::AlignBaseline);auto *u=new QLabel(unit);u->setObjectName(large ? "heroUnit" : "metricUnit");l->addWidget(u,0,Qt::AlignBaseline);l->addStretch();return row;
   };
-
-  // makeCardRow: horizontal row of cards with dashed vertical dividers, no outer border
-  auto makeCardRow = [&]( std::initializer_list<QWidget *> cards ) -> QWidget * {
-    QWidget *row = new QWidget();
-    QHBoxLayout *hl = new QHBoxLayout( row );
-    hl->setContentsMargins( 0, 0, 0, 0 );
-    hl->setSpacing( 0 );
-    bool first = true;
-    for ( QWidget *card : cards )
-    {
-      if ( !first )
-      {
-        QFrame *sep = new QFrame();
-        sep->setFrameShape( QFrame::VLine );
-        sep->setFixedWidth( 1 );
-        sep->setStyleSheet( QString("QFrame { border: none; border-left: 2px dashed %1; background: transparent; }").arg(m_ringColorHex) );
-        hl->addWidget( sep );
-      }
-      hl->addWidget( card, 1 );
-      first = false;
+  auto *profile=FluentTheme::createCard();auto *profileLayout=new QHBoxLayout(profile);profileLayout->setContentsMargins(24,18,24,18);
+  auto *profileText=new QVBoxLayout;profileText->setSpacing(6);profileText->addWidget(muted("Active profile"));
+  m_activeProfileLabel=new QLabel(m_profileManager->activeProfileName());m_activeProfileLabel->setObjectName("sectionTitle");
+  profileText->addWidget(m_activeProfileLabel);profileText->addWidget(muted("Power, cooling and lighting"));profileLayout->addLayout(profileText,1);
+  auto *manage=new QPushButton("Manage profiles");profileLayout->addWidget(manage);
+  connect(manage,&QPushButton::clicked,this,[this]{if(auto *pages=window()->findChild<QTabWidget*>("pages")) pages->setCurrentIndex(1);});
+  layout->addWidget(profile);
+  auto *metrics=new QHBoxLayout;metrics->setSpacing(16);
+  auto addMetrics=[&](QVBoxLayout *l,QLabel *&temperature,QLabel *&fan,QLabel *&frequency,QLabel *&power){
+    l->setSpacing(0);
+    l->addSpacing(4);
+    auto *statsWidget=new QWidget;statsWidget->setObjectName("primaryMetrics");
+    auto *stats=new QGridLayout(statsWidget);stats->setContentsMargins(0,0,0,0);stats->setHorizontalSpacing(8);stats->setVerticalSpacing(4);
+    int col=0;
+    for(auto field: {std::tuple<QString,QString,QLabel**>{"Temperature","°C",&temperature},{"Fan","%",&fan},{"Frequency","GHz",&frequency},{"Power","W",&power}}){
+      auto *caption=muted(std::get<0>(field));caption->setWordWrap(false);
+      stats->addWidget(caption,0,col);
+      stats->addWidget(value(*std::get<2>(field),std::get<1>(field),col==0),1,col,Qt::AlignBottom);
+      stats->setColumnStretch(col,1);
+      if(col<6){auto *line=new QFrame;line->setObjectName("metricDivider");line->setFixedWidth(1);stats->addWidget(line,0,col+1,2,1);}
+      col+=2;
     }
-    return row;
+    l->addWidget(statsWidget);
   };
-
-  // makePanel: wraps N cards in one bordered box with dashed vertical dividers
-  auto makePanel = [&]( std::initializer_list<QWidget *> cards ) -> QFrame * {
-    QFrame *panel = new QFrame();
-    panel->setStyleSheet( QString("QFrame#metricPanel { border: 2px solid %1; border-radius: 6px; background: transparent; }"
-                                  "QWidget { background: transparent; }").arg(m_ringColorHex) );
-    panel->setObjectName( "metricPanel" );
-    QHBoxLayout *hl = new QHBoxLayout( panel );
-    hl->setContentsMargins( 0, 0, 0, 0 );
-    hl->setSpacing( 0 );
-    bool first = true;
-    for ( QWidget *card : cards )
-    {
-      if ( !first )
-      {
-        QFrame *sep = new QFrame();
-        sep->setFrameShape( QFrame::VLine );
-        sep->setFixedWidth( 1 );
-        sep->setStyleSheet( QString("QFrame { border: none; border-left: 2px dashed %1; background: transparent; }").arg(m_ringColorHex) );
-        hl->addWidget( sep );
-      }
-      hl->addWidget( card, 1 );
-      first = false;
-    }
-    return panel;
+  auto *cpu=FluentTheme::createCard();auto *cpuLayout=new QVBoxLayout(cpu);cpuLayout->setContentsMargins(16,16,16,16);cpuLayout->setSpacing(0);cpuLayout->setAlignment(Qt::AlignTop);
+  auto *cpuHead=title("CPU");cpuHead->setFixedHeight(24);cpuLayout->addWidget(cpuHead);cpuLayout->addSpacing(4);
+  auto *cpuModel=muted(m_cpuModel.isEmpty() ? "Processor" : m_cpuModel);cpuModel->setFixedHeight(28);cpuModel->setAlignment(Qt::AlignLeft|Qt::AlignTop);cpuLayout->addWidget(cpuModel);
+  addMetrics(cpuLayout,m_cpuTempLabel,m_fanSpeedLabel,m_cpuFrequencyLabel,m_cpuPowerLabel);metrics->addWidget(cpu,1);
+  auto *gpu=FluentTheme::createCard();auto *gpuLayout=new QVBoxLayout(gpu);gpuLayout->setContentsMargins(16,16,16,16);gpuLayout->setSpacing(0);gpuLayout->setAlignment(Qt::AlignTop);
+  auto *gpuHeader=new QWidget;gpuHeader->setFixedHeight(24);auto *gpuHead=new QHBoxLayout(gpuHeader);gpuHead->setContentsMargins(0,0,0,0);gpuHead->addWidget(title("GPU"),1);
+  m_gpuToggleButton=new QPushButton("Show iGPU");m_gpuToggleButton->setStyleSheet("padding: 3px 8px; min-height: 14px;");m_gpuToggleButton->hide();gpuHead->addWidget(m_gpuToggleButton);gpuLayout->addWidget(gpuHeader);gpuLayout->addSpacing(4);
+  m_gpuHeaderLabel=muted(!m_dGpuModel.isEmpty() ? m_dGpuModel : m_iGpuModel.isEmpty() ? "Graphics processor" : m_iGpuModel);
+  m_gpuHeaderLabel->setFixedHeight(28);m_gpuHeaderLabel->setAlignment(Qt::AlignLeft|Qt::AlignTop);gpuLayout->addWidget(m_gpuHeaderLabel);
+  m_dGpuGaugeContainer=new QWidget;auto *dLayout=new QVBoxLayout(m_dGpuGaugeContainer);dLayout->setContentsMargins(0,0,0,0);dLayout->setSpacing(0);dLayout->setAlignment(Qt::AlignTop);
+  addMetrics(dLayout,m_gpuTempLabel,m_gpuFanSpeedLabel,m_gpuFrequencyLabel,m_gpuPowerLabel);
+  m_dGpuExtraHSep=new QFrame;m_dGpuExtraHSep->hide();dLayout->addWidget(m_dGpuExtraHSep);
+  m_dGpuExtraRow=new QWidget;m_dGpuExtraRow->setObjectName("gpuDetails");m_dGpuExtraRow->setAttribute(Qt::WA_StyledBackground);
+  auto *extra=new QGridLayout(m_dGpuExtraRow);extra->setContentsMargins(12,8,12,8);extra->setHorizontalSpacing(8);extra->setVerticalSpacing(4);
+  int col=0;
+  for(auto field: {std::tuple<QString,QString,QLabel**>{"GPU load","%",&m_gpuComputeUtilLabel},{"VRAM load","%",&m_gpuMemoryUtilLabel},{"P-State","",&m_gpuPstateLabel},{"Clock offset","MHz",&m_gpuClockOffsetLabel}}){
+    const int row=col/2,column=(col%2)*3;
+    auto *caption=muted(std::get<0>(field));caption->setWordWrap(false);
+    extra->addWidget(caption,row,column);
+    auto *reading=value(*std::get<2>(field),std::get<1>(field),false);
+    (*std::get<2>(field))->setObjectName("detailValue");
+    extra->addWidget(reading,row,column+1);extra->setColumnStretch(column+1,1);++col;
+  }
+  auto *detailDivider=new QFrame;detailDivider->setObjectName("metricDivider");detailDivider->setFixedWidth(1);extra->addWidget(detailDivider,0,2,2,1);
+  m_dGpuExtraRow->hide();dLayout->addSpacing(12);dLayout->addWidget(m_dGpuExtraRow);gpuLayout->addWidget(m_dGpuGaugeContainer);
+  m_iGpuGaugeContainer=new QWidget;auto *iLayout=new QVBoxLayout(m_iGpuGaugeContainer);iLayout->setContentsMargins(0,0,0,0);iLayout->setSpacing(0);iLayout->setAlignment(Qt::AlignTop);
+  addMetrics(iLayout,m_iGpuTempLabel,m_iGpuFanSpeedLabel,m_iGpuFrequencyLabel,m_iGpuPowerLabel);m_iGpuGaugeContainer->hide();gpuLayout->addWidget(m_iGpuGaugeContainer);metrics->addWidget(gpu,1);
+  layout->addLayout(metrics);
+  m_waterCoolerHeader=title("Water cooler");m_waterCoolerHeader->setVisible(m_waterCoolerSupported);
+  m_waterCoolerStatusLabel=new QLabel("Disconnected");
+  m_waterCoolerEnableCheckBox=new FluentToggle("Enabled");m_waterCoolerEnableCheckBox->setObjectName("waterCoolerEnabledToggle");m_waterCoolerEnableCheckBox->setFixedWidth(140);m_waterCoolerEnableCheckBox->setAccessibleName("Water cooler enabled");m_waterCoolerEnableCheckBox->setChecked(WATER_COOLER_INITIAL_STATE);
+  auto *water=FluentTheme::createCard();auto *waterLayout=new QHBoxLayout(water);waterLayout->setContentsMargins(20,16,20,16);waterLayout->setSpacing(16);
+  auto *waterText=new QVBoxLayout;waterText->addWidget(m_waterCoolerHeader);waterText->addWidget(m_waterCoolerStatusLabel);waterLayout->addLayout(waterText,1);
+  auto *waterValues=new QWidget;auto *waterValuesLayout=new QHBoxLayout(waterValues);waterValuesLayout->setContentsMargins(0,0,0,0);
+  waterValuesLayout->setSpacing(12);
+  auto makeSelector=[&](const QString &name,const QString &caption){
+    auto *column=new QVBoxLayout;column->setSpacing(4);column->addWidget(muted(caption));
+    auto *combo=FluentTheme::createSelector();combo->setObjectName(name);combo->setFixedWidth(100);
+    // Display exact telemetry even when it is not one of the requested presets.
+    combo->setEditable(true);combo->lineEdit()->setReadOnly(true);combo->lineEdit()->setFocusPolicy(Qt::NoFocus);
+    column->addWidget(combo);waterValuesLayout->addLayout(column);return combo;
   };
-
-  // CPU section
-  const QString cpuHeaderText = m_cpuModel.isEmpty() ? QStringLiteral( "Main Processor Monitor" ) : m_cpuModel;
-  QLabel *cpuHeader = new QLabel( cpuHeaderText );
-  cpuHeader->setStyleSheet( "font-size: 14px; font-weight: bold;" );
-  cpuHeader->setAlignment( Qt::AlignCenter );
-  layout->addWidget( cpuHeader );
-
-  layout->addWidget( makePanel({
-    makeCard( "CPU - Temp",      "°C", m_cpuTempLabel ),
-    makeCard( "CPU - Fan",       "%",  m_fanSpeedLabel ),
-    makeCard( "CPU - Frequency", "GHz", m_cpuFrequencyLabel ),
-    makeCard( "CPU - Power",     "W",  m_cpuPowerLabel )
-  }) );
-
-  // GPU section - single section with toggle between dGPU and iGPU
-  // Initial GPU header text: prefer dGPU model, fall back to iGPU model
-  const QString gpuHeaderText = !m_dGpuModel.isEmpty() ? m_dGpuModel
-                               : !m_iGpuModel.isEmpty() ? m_iGpuModel
-                               : QStringLiteral( "Graphics Card Monitor" );
-  m_gpuHeaderLabel = new QLabel( gpuHeaderText );
-  m_gpuHeaderLabel->setStyleSheet( "font-size: 14px; font-weight: bold;" );
-
-  m_gpuToggleButton = new QPushButton( "Show iGPU" );
-  m_gpuToggleButton->setFixedHeight( 24 );
-  m_gpuToggleButton->setStyleSheet(
-    QString("QPushButton { font-size: 11px; padding: 2px 12px; border: 1px solid %1; border-radius: 4px; }"
-            "QPushButton:hover { background-color: %2; }").arg(midHex, highlightHex) );
-  m_gpuToggleButton->setVisible( false );  // Hidden until both GPUs detected
-
-  // Same grid trick as title row: both share cell (0,0) - label centered, button right-aligned
-  QGridLayout *gpuHeaderLayout = new QGridLayout();
-  gpuHeaderLayout->setContentsMargins( 0, 0, 0, 0 );
-  gpuHeaderLayout->addWidget( m_gpuHeaderLabel,  0, 0, Qt::AlignCenter );
-  gpuHeaderLayout->addWidget( m_gpuToggleButton, 0, 0, Qt::AlignRight | Qt::AlignVCenter );
-  layout->addLayout( gpuHeaderLayout );
-
-  // dGPU panel (default view) - two-row box: main metrics + NVIDIA extended row (hidden until data)
-  m_dGpuGaugeContainer = new QWidget();
-  {
-    QVBoxLayout *outerVL = new QVBoxLayout( m_dGpuGaugeContainer );
-    outerVL->setContentsMargins( 0, 0, 0, 0 );
-    outerVL->setSpacing( 0 );
-
-    QFrame *panel = new QFrame();
-    panel->setObjectName( "metricPanel" );
-    panel->setStyleSheet( QString("QFrame#metricPanel { border: 2px solid %1; border-radius: 6px; background: transparent; }"
-                                  "QWidget { background: transparent; }").arg(m_ringColorHex) );
-
-    QVBoxLayout *panelVL = new QVBoxLayout( panel );
-    panelVL->setContentsMargins( 0, 0, 0, 0 );
-    panelVL->setSpacing( 0 );
-
-    // Row 1: primary dGPU metrics
-    panelVL->addWidget( makeCardRow({
-      makeCard( "Temp",      "\u00b0C", m_gpuTempLabel ),
-      makeCard( "Fan",       "%",   m_gpuFanSpeedLabel ),
-      makeCard( "Core Frequency", "GHz", m_gpuFrequencyLabel ),
-      makeCard( "Power",     "W",   m_gpuPowerLabel )
-    }) );
-
-    // Horizontal dashed separator (only visible when row 2 is shown)
-    m_dGpuExtraHSep = new QFrame();
-    m_dGpuExtraHSep->setFrameShape( QFrame::HLine );
-    m_dGpuExtraHSep->setFixedHeight( 2 );
-    m_dGpuExtraHSep->setStyleSheet( QString("QFrame { border: none; border-top: 2px dashed %1; background: transparent; margin: 0px 8px; }").arg(m_ringColorHex) );
-    m_dGpuExtraHSep->setVisible( false );
-    panelVL->addWidget( m_dGpuExtraHSep );
-
-    // Row 2: NVIDIA extended metrics - hidden until data arrives
-    m_dGpuExtraRow = makeCardRow({
-      makeCard( "GPU Load",     "%",   m_gpuComputeUtilLabel ),
-      makeCard( "VRAM Load",    "%",   m_gpuMemoryUtilLabel ),
-      makeCard( "P-State",      "",    m_gpuPstateLabel ),
-      makeCard( "Clock Offset", "MHz", m_gpuClockOffsetLabel )
-    });
-    m_gpuClockOffsetLabel->setStyleSheet( QString("font-size: 18px; font-weight: bold; color: %1; background: transparent; border: none;").arg(innerTextHex) );
-    m_dGpuExtraRow->setVisible( false );
-    panelVL->addWidget( m_dGpuExtraRow );
-
-    outerVL->addWidget( panel );
+  m_waterCoolerFanSelector=makeSelector("waterCoolerFanSelector","Fan");
+  m_waterCoolerFanSelector->addItem("Auto",-1);
+  for(int percent:{20,40,60,70,80,90,100}) m_waterCoolerFanSelector->addItem(QString::number(percent)+"%",percent);
+  m_waterCoolerPumpSelector=makeSelector("waterCoolerPumpSelector","Pump");
+  m_waterCoolerPumpSelector->addItem("Off",static_cast<int>(PumpVoltage::Off));
+  m_waterCoolerPumpSelector->addItem("7 V",static_cast<int>(PumpVoltage::V7));
+  m_waterCoolerPumpSelector->addItem("8 V",static_cast<int>(PumpVoltage::V8));
+  m_waterCoolerPumpSelector->addItem("11 V",static_cast<int>(PumpVoltage::V11));
+  for(auto *combo:{m_waterCoolerFanSelector,m_waterCoolerPumpSelector}) {
+    combo->setCurrentIndex(-1);combo->setEditText("—");combo->setEnabled(readOnlyPreview);
   }
-  layout->addWidget( m_dGpuGaugeContainer );
-
-  // iGPU panel (hidden by default)
-  m_iGpuGaugeContainer = new QWidget();
-  {
-    QVBoxLayout *vl = new QVBoxLayout( m_iGpuGaugeContainer );
-    vl->setContentsMargins( 0, 0, 0, 0 );
-    vl->setSpacing( 0 );
-    vl->addWidget( makePanel({
-      makeCard( "iGPU - Temp",      "°C", m_iGpuTempLabel ),
-      makeCard( "iGPU - Fan",       "%",  m_iGpuFanSpeedLabel ),
-      makeCard( "iGPU - Frequency", "GHz", m_iGpuFrequencyLabel ),
-      makeCard( "iGPU - Power",     "W",  m_iGpuPowerLabel )
-    }) );
-  }
-  m_iGpuGaugeContainer->setVisible( false );
-  layout->addWidget( m_iGpuGaugeContainer );
-
-  // Water cooler section
-  m_waterCoolerHeader = new QLabel( "Water Cooler Monitor" );
-  m_waterCoolerHeader->setStyleSheet( "font-size: 14px; font-weight: bold;" );
-  m_waterCoolerHeader->setAlignment( Qt::AlignCenter );
-  layout->addWidget( m_waterCoolerHeader );
-
-  m_waterCoolerGrid = new QGridLayout();
-  m_waterCoolerGrid->setContentsMargins( 0, 0, 0, 0 );
-  m_waterCoolerGrid->addWidget( makePanel({
-    makeCard( "Water Cooler - Fan",  "%",     m_waterCoolerFanSpeedLabel ),
-    makeCard( "Water Cooler - Pump", "Level", m_waterCoolerPumpLabel )
-  }), 0, 0 );
-  layout->addLayout( m_waterCoolerGrid );
-
-  // Hide water cooler monitor section if water cooler not supported
-  if ( !m_waterCoolerSupported )
-  {
-    m_waterCoolerHeader->setVisible( false );
-    // Hide all widgets in the water cooler grid
-    for ( int i = 0; i < m_waterCoolerGrid->count(); ++i )
-    {
-      if ( auto *w = m_waterCoolerGrid->itemAt( i )->widget() )
-        w->setVisible( false );
-    }
-  }
-
+  connect(m_waterCoolerFanSelector,&QComboBox::activated,this,[this](int index){
+    if(readOnlyPreview){m_previewFanEdited=true;return;}
+    if(index<0) return;
+    const int speed=m_waterCoolerFanSelector->itemData(index).toInt();
+    const bool applied=speed<0 ? m_profileManager->getClient()->setWaterCoolerAutoControl(true)
+                               : m_profileManager->getClient()->setWaterCoolerFanSpeed(speed);
+    if(applied) m_waterCoolerAutoControl=speed<0;
+    else refreshWaterCoolerStatus();
+  });
+  connect(m_waterCoolerPumpSelector,&QComboBox::activated,this,[this](int index){
+    if(readOnlyPreview){m_previewPumpEdited=true;return;}
+    if(index<0) return;
+    if(m_profileManager->getClient()->setWaterCoolerPumpVoltage(m_waterCoolerPumpSelector->itemData(index).toInt())) m_waterCoolerAutoControl=false;
+    else refreshWaterCoolerStatus();
+  });
+  m_waterCoolerGrid=new QGridLayout;m_waterCoolerGrid->addWidget(waterValues,0,0);waterLayout->addLayout(m_waterCoolerGrid);
+  waterLayout->addWidget(m_waterCoolerEnableCheckBox,0,Qt::AlignBottom);
+  auto *waterControls=new QPushButton("Open controls");waterLayout->addWidget(waterControls,0,Qt::AlignBottom);
+  connect(waterControls,&QPushButton::clicked,this,[this]{if(auto *navigation=window()->findChild<QListWidget *>("navigation")) navigation->setCurrentRow(3);});
+  water->setVisible(m_waterCoolerSupported);layout->addWidget(water);
+  new HardwareTab(m_systemMonitor,body);
   layout->addStretch();
 }
 
@@ -414,10 +262,6 @@ void DashboardTab::connectSignals()
            this, &DashboardTab::onDGpuClockOffsetsChanged );
   connect( m_systemMonitor, &SystemMonitor::dGpuMemClockOffsetChanged,
            this, &DashboardTab::onDGpuClockOffsetsChanged );
-  connect( m_systemMonitor, &SystemMonitor::waterCoolerFanSpeedChanged,
-           this, &DashboardTab::onWaterCoolerFanSpeedChanged );
-  connect( m_systemMonitor, &SystemMonitor::waterCoolerPumpLevelChanged,
-           this, &DashboardTab::onWaterCoolerPumpLevelChanged );
 
   // Connect to profile manager for active profile changes
   connect( m_profileManager, &ProfileManager::activeProfileIndexChanged,
@@ -426,8 +270,8 @@ void DashboardTab::connectSignals()
            } );
 
 
-  // Water cooler enable toggle button -> emit signal for cross-tab sync and update status
-  connect( m_waterCoolerEnableCheckBox, &QPushButton::toggled,
+  // Water cooler enable switch -> emit signal for cross-tab sync and update status
+  connect( m_waterCoolerEnableCheckBox, &QCheckBox::toggled,
            this, [this]() {
              updateWaterCoolerStatus();
              emit waterCoolerEnableChanged( m_waterCoolerEnableCheckBox->isChecked() );
@@ -444,12 +288,30 @@ void DashboardTab::updateWaterCoolerStatus()
   if (!isVisible() || window()->isMinimized() || m_waterCoolerReadPending ||
       !m_waterCoolerSupported || !m_waterCoolerHeader) return;
   m_waterCoolerReadPending = true;
-  readUccdBatch(this, {"GetWaterCoolerAvailable", "GetWaterCoolerConnected"}, [this](const QVariantMap &values) {
+  readUccdBatch(this, {"GetWaterCoolerAvailable", "GetWaterCoolerConnected", "IsWaterCoolerAutoControlEnabled", "GetWaterCoolerFanSpeed", "GetWaterCoolerPumpLevel"}, [this](const QVariantMap &values) {
     m_waterCoolerReadPending = false;
     if (!isVisible() || window()->isMinimized() ||
         !values.contains("GetWaterCoolerAvailable") || !values.contains("GetWaterCoolerConnected")) return;
     const bool scanning = values.value("GetWaterCoolerAvailable").toBool();
     const bool connected = values.value("GetWaterCoolerConnected").toBool();
+    // Only user activation dispatches commands; polling only reflects current state.
+    m_waterCoolerAutoControl=values.value("IsWaterCoolerAutoControlEnabled",true).toBool();
+    const bool manualAllowed=connected && m_waterCoolerEnableCheckBox->isChecked();
+    for(auto *combo:{m_waterCoolerFanSelector,m_waterCoolerPumpSelector}) {
+      combo->setEnabled(readOnlyPreview || manualAllowed);
+      combo->setToolTip(readOnlyPreview ? "Preview: selection is not applied to hardware" :
+        "Selection applies immediately; manual values turn off automatic fan and pump control");
+    }
+    if(!m_previewFanEdited && values.contains("GetWaterCoolerFanSpeed")) {
+      const int speed=values.value("GetWaterCoolerFanSpeed").toInt();
+      const int index=m_waterCoolerFanSelector->findData(m_waterCoolerAutoControl ? -1 : speed);
+      m_waterCoolerFanSelector->setCurrentIndex(index);
+      if(index<0) m_waterCoolerFanSelector->setEditText(QString::number(speed)+"%");
+      if(m_waterCoolerAutoControl) m_waterCoolerFanSelector->setToolTip("Auto · current fan speed: "+QString::number(speed)+"%");
+    }
+    if(!m_previewPumpEdited && values.contains("GetWaterCoolerPumpLevel"))
+      m_waterCoolerPumpSelector->setCurrentIndex(m_waterCoolerPumpSelector->findData(values.value("GetWaterCoolerPumpLevel").toInt()));
+
     auto setWCStatus = [ this ]( const bool connected )
     {
       for ( int i = 0; i < m_waterCoolerGrid->count(); ++i )
@@ -458,7 +320,7 @@ void DashboardTab::updateWaterCoolerStatus()
           w->setVisible( connected );
       }
 
-      m_waterCoolerHeader->setVisible( connected );
+      m_waterCoolerHeader->setVisible( true );
     };
 
     // Check if water cooler is enabled
@@ -469,11 +331,12 @@ void DashboardTab::updateWaterCoolerStatus()
     const QString textHex = pal.color(QPalette::WindowText).name();
     const QString midHex = pal.color(QPalette::Mid).name();
     const QString highlightHex = pal.color(QPalette::Highlight).name();
-    const QString searchingColorHex = QStringLiteral("#0066cc");  // Dark blue for searching
+    const QString searchingColorHex = FluentTheme::colors().accent.name();  // Dark blue for searching
 
-    // Helper: emit status bar signal (dashboard label is hidden).
+    // Keep the visible card and status bar in sync.
     auto emitStatus = [this]( const QString &statusText, const QString &colorHex )
     {
+      m_waterCoolerStatusLabel->setText(statusText);
       emit waterCoolerStatusChanged(
         QString("<span style='color: %1;'>&#9679;</span> Water Cooler: %2").arg( colorHex, statusText ) );
     };
@@ -762,23 +625,6 @@ void DashboardTab::onDGpuClockOffsetsChanged()
   }
   else
     m_gpuClockOffsetLabel->setText( "--" );
-}
-
-void DashboardTab::onWaterCoolerFanSpeedChanged()
-{
-  if ( m_waterCoolerFanSpeedLabel )
-    m_waterCoolerFanSpeedLabel->setText( formatFanSpeed( m_systemMonitor->waterCoolerFanSpeed() ) );
-}
-
-void DashboardTab::onWaterCoolerPumpLevelChanged()
-{
-  if ( m_waterCoolerPumpLabel )
-  {
-    QString val = m_systemMonitor->waterCoolerPumpLevel();
-    if ( val.isEmpty() )
-      val = "--";
-    m_waterCoolerPumpLabel->setText( val );
-  }
 }
 
 void DashboardTab::setWaterCoolerEnabled( bool enabled )

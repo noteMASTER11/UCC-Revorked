@@ -19,6 +19,11 @@ find_package( Qt6 REQUIRED COMPONENTS Core DBus )
 add_library( ucc-dbus SHARED
   UccdClient.cpp
 )
+if(UCC_READ_ONLY_PREVIEW)
+  target_compile_definitions(ucc-dbus PUBLIC UCC_READ_ONLY_PREVIEW)
+  # A preview must never resolve the installed write-enabled client library.
+  set_target_properties(ucc-dbus PROPERTIES OUTPUT_NAME ucc-dbus-preview)
+endif()
 
 target_include_directories( ucc-dbus
   PUBLIC

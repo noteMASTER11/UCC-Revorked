@@ -1,4 +1,5 @@
 #pragma once
+#include "PreviewMode.hpp"
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -15,6 +16,7 @@ namespace ucc {
 inline void readUccdAsync(QObject *consumer, const QString &method, const QVariantList &args,
                           std::function<void(std::optional<QVariant>)> ready)
 {
+  if (!mayDispatchUccdMethod(method)) { ready(std::nullopt); return; }
   auto message = QDBusMessage::createMethodCall("com.uniwill.uccd", "/com/uniwill/uccd",
                                                 "com.uniwill.uccd", method);
   message.setArguments(args);

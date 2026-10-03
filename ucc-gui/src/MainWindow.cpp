@@ -14,6 +14,14 @@
  */
 
 #include "MainWindow.hpp"
+#include "FluentTheme.hpp"
+#include "FluentSidebar.hpp"
+#include "FluentEntrance.hpp"
+#include "PreviewMode.hpp"
+#include <QTabBar>
+#include <QSignalBlocker>
+#include <QPainter>
+#include <QStyleOptionComboBox>
 #include "ProfileManager.hpp"
 #include "SystemMonitor.hpp"
 #include "MonitorTab.hpp"
@@ -90,7 +98,6 @@ protected:
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QDebug>
-#include <QPainter>
 #include <QShowEvent>
 #include <QHideEvent>
 
@@ -115,25 +122,25 @@ MainWindow::MainWindow( QWidget *parent )
     m_gpuDefaultPowerLimit = *gpuDefault;
 
   setWindowTitle( "Uniwill Control Center" );
-  setGeometry( 100, 100, 900, 700 );
+  resize(1280,900);
+  if (readOnlyPreview) setWindowTitle("UCC · Read-only preview");
 
+  setAttribute(Qt::WA_TranslucentBackground);
   setupUI();
 
   // Connect signals after UI elements are created but before loading data
   connectSignals();
 
-  // Initialize status bar
+  auto *statusLayout=findChild<QVBoxLayout *>("sidebarStatusLayout");
+  // Status information lives in the navigation footer.
   // Water cooler status indicator (left of the connection indicator)
   if ( m_waterCoolerSupported )
   {
     m_waterCoolerStatusBarLabel = new QLabel( this );
     m_waterCoolerStatusBarLabel->setTextFormat( Qt::RichText );
-    statusBar()->addPermanentWidget( m_waterCoolerStatusBarLabel );
-
-    QFrame *wcSep = new QFrame( this );
-    wcSep->setFrameShape( QFrame::VLine );
-    wcSep->setFrameShadow( QFrame::Sunken );
-    statusBar()->addPermanentWidget( wcSep );
+    m_waterCoolerStatusBarLabel->setWordWrap(true);
+    m_waterCoolerStatusBarLabel->setObjectName("muted");
+    statusLayout->addWidget(m_waterCoolerStatusBarLabel);
 
     connect( m_dashboardTab, &DashboardTab::waterCoolerStatusChanged,
              m_waterCoolerStatusBarLabel, &QLabel::setText );
@@ -143,7 +150,9 @@ MainWindow::MainWindow( QWidget *parent )
 
   m_connectionLabel = new QLabel( this );
   m_connectionLabel->setTextFormat( Qt::RichText );
-  statusBar()->addPermanentWidget( m_connectionLabel );
+  m_connectionLabel->setWordWrap(true);m_connectionLabel->setObjectName("activeProfileStatus");
+  statusLayout->addWidget(m_connectionLabel);
+  statusBar()->hide();
   // Set initial connection state
   onUccdConnectionChanged( m_UccdClient->isConnected() );
   statusBar()->showMessage( "Ready" );
@@ -170,13 +179,14 @@ MainWindow::MainWindow( QWidget *parent )
 
 MainWindow::~MainWindow()
 {
-  // Destructor
+  for(auto *child:findChildren<QObject*>()) QObject::disconnect(child,nullptr,this,nullptr);
 }
 
 void MainWindow::showEvent(QShowEvent *event)
 {
   QMainWindow::showEvent(event);
   updateMonitoringActivity();
+  if(m_entrance) m_entrance->play();
 }
 
 void MainWindow::hideEvent(QHideEvent *event)
@@ -206,8 +216,81 @@ void MainWindow::setupUI()
 {
   // Create tab widget
   m_tabs = new QTabWidget( this );
-  setCentralWidget( m_tabs );
-
+  m_tabs->setObjectName("pages");
+  m_tabs->tabBar()->hide();
+  auto *shell=new QWidget(this);
+  auto *shellLayout=new QHBoxLayout(shell);
+  shellLayout->setContentsMargins(0,0,0,0); shellLayout->setSpacing(0);
+  auto *sidebar=new FluentSidebar(shell);
+  sidebar->setFixedWidth(250);
+  auto *sideLayout=new QVBoxLayout(sidebar);sideLayout->setContentsMargins(12,28,12,20);
+  auto *brand=new QLabel("UCC",sidebar);brand->setObjectName("brand");
+  sideLayout->addWidget(brand);sideLayout->addSpacing(12);
+  auto *device=new QLabel("Uniwill Control Center",sidebar);device->setWordWrap(true);device->setObjectName("muted");
+  sideLayout->addWidget(device);sideLayout->addSpacing(20);
+  auto *navigation=new QListWidget(sidebar);navigation->setObjectName("navigation");
+  navigation->setIconSize(QSize(24,24));
+  const QStringList labels={"Overview","Profiles","Cooler Settings","Watercool Settings","Monitor","Keyboard & Hardware"};
+  for(const auto &label:labels) new QListWidgetItem(FluentTheme::icon(label),label,navigation);
+  sideLayout->addWidget(navigation,1);
+  auto *footer=new QWidget(sidebar);footer->setObjectName("sidebarFooter");
+  auto *statusLayout=new QVBoxLayout(footer);statusLayout->setObjectName("sidebarStatusLayout");statusLayout->setContentsMargins(12,16,12,0);statusLayout->setSpacing(10);
+  if(readOnlyPreview) {
+    auto *badge=new QLabel("Read-only preview",footer);badge->setObjectName("previewBadge");
+    badge->setToolTip("Hardware and settings commands are blocked in this build.");statusLayout->addWidget(badge);
+  }
+  auto *connection=new QLabel(footer);connection->setWordWrap(true);statusLayout->addWidget(connection);
+  auto *message=new QLabel(footer);message->setObjectName("muted");message->setWordWrap(true);message->hide();statusLayout->addWidget(message);
+  connect(statusBar(),&QStatusBar::messageChanged,message,[message](const QString &text){const bool show=!text.isEmpty() && text!="Ready";message->setText(show ? text : QString());message->setVisible(show);});
+  sideLayout->addWidget(footer);
+  auto updateSidebar=[connection](bool connected){connection->setText(connected ? "●  Service connected" : "○  Service unavailable");connection->setProperty("status",connected ? "success" : "muted");connection->style()->unpolish(connection);connection->style()->polish(connection);};
+  updateSidebar(m_UccdClient->isConnected());
+  connect(m_UccdClient.get(),&UccdClient::connectionStatusChanged,sidebar,updateSidebar);
+  shellLayout->addWidget(sidebar);
+  auto *content=new QWidget(shell);content->setObjectName("contentPane");content->setAttribute(Qt::WA_StyledBackground);auto *contentLayout=new QVBoxLayout(content);
+  contentLayout->setContentsMargins(24,24,24,16);contentLayout->setSpacing(16);
+  auto *heading=new QLabel("Overview",content);heading->setObjectName("pageTitle");
+  auto *headerRow=new QHBoxLayout;headerRow->addWidget(heading,1);
+  auto *themeToggle=new QPushButton(content);themeToggle->setObjectName("themeToggle");themeToggle->setFixedSize(36,34);themeToggle->setIconSize(QSize(22,22));themeToggle->setStyleSheet("padding: 5px;");
+  themeToggle->setAccessibleName("Interface theme");
+  headerRow->addWidget(themeToggle,0,Qt::AlignTop);contentLayout->addLayout(headerRow);
+  auto refreshTheme=[themeToggle,navigation,sidebar]{
+    themeToggle->setIcon(FluentTheme::icon(FluentTheme::modeLabel()));
+    themeToggle->setAccessibleName("Theme: "+FluentTheme::modeLabel());
+    themeToggle->setToolTip("Theme: "+FluentTheme::modeLabel()+" · Light → Dark → Auto (system theme)");
+    for(int i=0;i<navigation->count();++i) navigation->item(i)->setIcon(FluentTheme::icon(navigation->item(i)->text()));
+    sidebar->update();
+  };
+  connect(themeToggle,&QPushButton::clicked,this,[]{
+    using FluentTheme::Mode;const auto next=FluentTheme::mode()==Mode::Light ? Mode::Dark : FluentTheme::mode()==Mode::Dark ? Mode::Auto : Mode::Light;
+    FluentTheme::setMode(next);
+  });
+  connect(FluentTheme::events(),&FluentTheme::ThemeEvents::changed,this,refreshTheme);refreshTheme();
+  auto *subtitle=new QLabel("Your system at a glance",content);subtitle->setObjectName("subtitle");contentLayout->addWidget(subtitle);
+  contentLayout->addWidget(m_tabs,1);shellLayout->addWidget(content,1);setCentralWidget(shell);
+  m_entrance=new FluentEntrance(content);
+  auto showNavigationHeading=[heading,subtitle,labels](int row) {
+    if(row<0 || row>=labels.size()) return;
+    heading->setText(labels[row]);
+    const QStringList descriptions={"Your system at a glance","Power, cooling and lighting in one profile","Shape CPU and GPU cooling for your profile","Water cooling, pump and lighting controls","Live system telemetry","Backlight and device controls"};
+    subtitle->setText(descriptions[row]);
+  };
+  connect(navigation,&QListWidget::currentRowChanged,this,[this,showNavigationHeading](int row){
+    if(row<0 || row>5) return;
+    const int pages[]={0,1,2,2,3,4};
+    if(row==3 && !m_waterCoolerSupported) return;
+    if(m_fanControlTab && (row==2 || row==3)) m_fanControlTab->findChild<QTabWidget *>("coolingPages")->setCurrentIndex(row-2);
+    const bool samePage=m_tabs->currentIndex()==pages[row];
+    m_tabs->setCurrentIndex(pages[row]);showNavigationHeading(row);
+    if(samePage) m_entrance->play();
+  });
+  connect(m_tabs,&QTabWidget::currentChanged,navigation,[this,navigation,showNavigationHeading](int index){
+    if(index<0 || index>4) return;
+    int row=index<3 ? index : index+1;
+    if(index==2 && m_fanControlTab) row=2+m_fanControlTab->findChild<QTabWidget *>("coolingPages")->currentIndex();
+    const QSignalBlocker blocked(navigation);navigation->setCurrentRow(row);showNavigationHeading(row);
+    m_entrance->play();
+  });
   // Connect tab changes to control monitoring
   connect( m_tabs, &QTabWidget::currentChanged, this, &MainWindow::onTabChanged );
 
@@ -220,6 +303,7 @@ void MainWindow::setupUI()
     {
       const QJsonObject obj = doc.object();
       laptopModel = obj.value( "laptopModel" ).toString();
+      if (!laptopModel.isEmpty()) device->setText(laptopModel);
       cpuModel    = obj.value( "cpuModel" ).toString();
       dGpuModel   = obj.value( "dGpuModel" ).toString();
       iGpuModel   = obj.value( "iGpuModel" ).toString();
@@ -241,6 +325,8 @@ void MainWindow::setupUI()
 
   setupKeyboardBacklightPage();
   setupHardwarePage();
+  if(!m_waterCoolerSupported) {navigation->item(3)->setFlags(navigation->item(3)->flags() & ~Qt::ItemIsEnabled);navigation->item(3)->setToolTip("Water cooling is not supported by this device.");}
+  navigation->setCurrentRow(0);
 }
 
 void MainWindow::setupHardwarePage()
@@ -307,7 +393,7 @@ void MainWindow::setupProfilesPage()
   QWidget *profilesWidget = new QWidget();
   QVBoxLayout *mainLayout = new QVBoxLayout( profilesWidget );
   mainLayout->setContentsMargins( 0, 0, 0, 0 );
-  mainLayout->setSpacing( 0 );
+  mainLayout->setSpacing(16);
 
   // Create scroll area for the profile content
   QScrollArea *scrollArea = new QScrollArea();
@@ -321,7 +407,8 @@ void MainWindow::setupProfilesPage()
   // Profile Selection ComboBox (in top layout)
   QHBoxLayout *selectLayout = new QHBoxLayout();
 
-  m_profileCombo = new QComboBox();
+  m_profileCombo = FluentTheme::createSelector();
+  m_profileCombo->setStyleSheet("QComboBox::down-arrow { image: none; }");
   m_profileCombo->setEditable( true );
   m_profileCombo->setInsertPolicy( QComboBox::NoInsert );
   // Don't populate here - will be done by onAllProfilesChanged signal
@@ -331,30 +418,33 @@ void MainWindow::setupProfilesPage()
   m_applyButton->setMaximumWidth( 80 );
 
   m_saveButton = new QPushButton( "Save" );
+  m_saveButton->setProperty("primary",true);
   m_saveButton->setMaximumWidth( 80 );
   m_saveButton->setEnabled( false );
 
   m_copyProfileButton = new QPushButton( "Copy" );
-  m_copyProfileButton->setMaximumWidth( 60 );
+  m_copyProfileButton->setMinimumWidth(80);
 
   m_removeProfileButton = new QPushButton( "Remove" );
-  m_removeProfileButton->setMaximumWidth( 70 );
+  m_removeProfileButton->setMinimumWidth(90);
 
-  selectLayout->addWidget( m_profileCombo, 1 );
+  selectLayout->setSpacing(8);
+  auto *profileLabel=new QLabel("Profile");profileLabel->setObjectName("muted");
+  selectLayout->addWidget(profileLabel);
+  m_profileCombo->setMinimumWidth(180);
+  m_profileCombo->setMaximumWidth(360);
+  selectLayout->addWidget(m_profileCombo,1);
+  selectLayout->addStretch(1);
+  selectLayout->addSpacing(8);
   selectLayout->addWidget( m_applyButton );
   selectLayout->addWidget( m_saveButton );
   selectLayout->addWidget( m_copyProfileButton );
   selectLayout->addWidget( m_removeProfileButton );
   mainLayout->addLayout( selectLayout );
 
-  // Add a separator line
-  QFrame *separator = new QFrame();
-  separator->setFrameShape( QFrame::HLine );
-  separator->setStyleSheet( "color: #cccccc;" );
-  mainLayout->addWidget( separator );
-
   // Now use grid layout for the details
-  scrollLayout->setContentsMargins( 15, 10, 15, 10 );
+  scrollLayout->setContentsMargins(0,0,0,0);
+  scrollLayout->setSpacing(16);
   QGridLayout *detailsLayout = new QGridLayout();
   detailsLayout->setSpacing( 12 );
   detailsLayout->setColumnStretch( 0, 0 );  // Labels column - minimal width
@@ -385,7 +475,7 @@ void MainWindow::setupProfilesPage()
   m_waterCoolerButton->setCheckable( true );
   m_mainsButton->setMaximumWidth( 100 );
   m_batteryButton->setMaximumWidth( 100 );
-  m_waterCoolerButton->setMaximumWidth( 100 );
+  m_waterCoolerButton->setMinimumWidth(120);
   buttonLayout->addWidget( m_mainsButton );
   buttonLayout->addWidget( m_batteryButton );
   buttonLayout->addWidget( m_waterCoolerButton );
@@ -810,10 +900,50 @@ void MainWindow::setupProfilesPage()
 
   detailsLayout->addItem( new QSpacerItem( 0, 20, QSizePolicy::Minimum, QSizePolicy::Expanding ), row, 0, 1, 2 );
 
-  scrollLayout->addLayout( detailsLayout );
+  for (auto row : {std::pair<QHBoxLayout *,QLabel *>{backlightLayout,m_brightnessValueLabel},
+                   {ctgpLayout,m_ctgpValueLabel},{tdp1Layout,m_odmPowerLimit1Value},
+                   {tdp2Layout,m_odmPowerLimit2Value},{tdp3Layout,m_odmPowerLimit3Value},
+                   {coresLayout,m_cpuCoresValue},{minFreqLayout,m_minFrequencyValue},
+                   {maxFreqLayout,m_maxFrequencyValue}})
+    FluentTheme::styleSliderRow(row.first,row.second);
+  odmPowerHeader->setObjectName("subheading");
+  cpuFreqHeader->setObjectName("subheading");
+
+  // Preserve the original controls and connections, regroup their grid items into cards.
+  struct Section { QString name; QFrame *card; QGridLayout *grid; int firstRow; };
+  QVector<Section> sections;
+  auto startSection=[&](const QString &name,int firstRow){
+    auto *card=FluentTheme::createCard();auto *grid=new QGridLayout(card);grid->setContentsMargins(24,24,24,24);grid->setHorizontalSpacing(24);grid->setVerticalSpacing(16);grid->setColumnStretch(1,1);
+    sections.append({name,card,grid,firstRow});
+  };
+  startSection("Profile",0);
+  const QStringList sectionNames={"Charging","Display and Keyboard","Fan control","GPU Power","System performance"};
+  while(detailsLayout->count()) {
+    int r,c,rs,cs;detailsLayout->getItemPosition(0,&r,&c,&rs,&cs);
+    auto *item=detailsLayout->takeAt(0);
+    if(auto *label=qobject_cast<QLabel*>(item->widget());label && sectionNames.contains(label->text()) && cs==2) {
+      startSection(label->text(),r);label->setStyleSheet(QString());label->setObjectName("cardTitle");
+    }
+    if(item->spacerItem()) {delete item;continue;}
+    auto &section=sections.last();
+    if(auto *widget=item->widget()){
+      if (auto *label=qobject_cast<QLabel *>(widget); label && c==0 && cs==1) label->setWordWrap(true);
+      section.grid->addWidget(widget,r-section.firstRow,c,rs,cs,item->alignment());delete item;
+    }
+    else if(auto *childLayout=item->layout()){childLayout->setParent(nullptr);section.grid->addLayout(childLayout,r-section.firstRow,c,rs,cs);}
+    else {delete item;}
+  }
+  delete detailsLayout;
+  for (auto &section : sections) FluentTheme::collapseWhenEmpty(section.card);
+  m_profileCombo->setAccessibleName("Profile name");
+  m_profileCombo->setObjectName("profileName");m_profileCombo->setMinimumHeight(36);
+  // Follow the reference's emphasis: activation/name, power, charging, cooling/lighting.
+  for(const auto &name:QStringList{"Profile","System performance","GPU Power","Charging","Fan control","Display and Keyboard"})
+    for(auto &section:sections) if(section.name==name) scrollLayout->addWidget(section.card);
+  scrollLayout->addStretch();
 
   scrollArea->setWidget( scrollWidget );
-  mainLayout->addWidget( scrollArea );
+  mainLayout->addWidget(scrollArea,1);
 
   m_tabs->addTab( profilesWidget, "Profiles" );
 }
@@ -1234,7 +1364,7 @@ void MainWindow::onTabChanged( int index )
             m_keyboardBrightnessSlider->blockSignals( true );
             m_keyboardBrightnessSlider->setValue( hwBrightness );
             m_keyboardBrightnessSlider->blockSignals( false );
-            m_keyboardBrightnessValueLabel->setText( QString::number( hwBrightness ) );
+            updateKeyboardAppearanceLabels();
           }
         }
 
@@ -1331,6 +1461,7 @@ void MainWindow::onProfileIndexChanged( int index )
     m_copyProfileButton->setEnabled( true );
     m_saveButton->setEnabled( true );
     statusBar()->showMessage( "Profile selected: " + profileName + " (click Apply to activate)" );
+    if(m_entrance && m_tabs->currentIndex()==1) m_entrance->play();
   }
 }
 
@@ -1407,7 +1538,7 @@ void MainWindow::updateConnectionStatusLabel()
     profileName = QStringLiteral( "Unknown" );
 
   m_connectionLabel->setText(
-    QString( "<span style='color: green;'>●</span> %1" ).arg( profileName ) );
+    QString("Profile: <b>%1</b>").arg(profileName.toHtmlEscaped()) );
 }
 
 void MainWindow::onActiveProfileIndexChanged()
@@ -1494,6 +1625,7 @@ void MainWindow::updateKeyboardEditorFromProfile( const QString &keyboardProfile
     m_keyboardBrightnessSlider->blockSignals( false );
   }
 
+  updateKeyboardAppearanceLabels();
   updateKeyboardProfileButtonStates();
 }
 
@@ -2667,7 +2799,7 @@ void MainWindow::onUccdConnectionChanged( bool connected )
     // Display disconnected status
     if ( m_connectionLabel )
       m_connectionLabel->setText(
-        QStringLiteral( "<span style='color: red;'>●</span> Disconnected" ) );
+        QStringLiteral("Profile: —") );
   }
   else
   {

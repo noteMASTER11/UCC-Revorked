@@ -22,7 +22,8 @@
 
   <!--
     Normal control operations: profile switching, keyboard backlight,
-    display brightness, fan profiles via the GUI, charging profile.
+    display brightness, cooler fan/pump controls and curves, keyboard/system profile
+    editing and application, charging profile.
     Allowed for the active session user without prompting for a password.
   -->
   <action id="com.uniwill.uccd.control">
@@ -37,8 +38,7 @@
 
   <!--
     Dangerous hardware operations: setting TDP, disabling fans, setting
-    arbitrary charge thresholds, toggling CPU cores, NVIDIA cTGP offset,
-    water cooler pump voltage.
+    arbitrary charge thresholds and charge type.
     Requires admin authentication (password prompt).
   -->
   <action id="com.uniwill.uccd.manage-hardware">

@@ -388,6 +388,7 @@ public slots:
   bool TurnOffWaterCoolerFan();
   bool TurnOffWaterCoolerPump();
   bool IsWaterCoolerAutoControlEnabled();
+  bool SetWaterCoolerAutoControl(bool enabled);
 
   // device capability methods
   bool GetWaterCoolerSupported();
@@ -425,6 +426,7 @@ private:
   UccDBusService *m_service;
   std::chrono::steady_clock::time_point m_lastDataCollectionAccess;
 
+  void updateWaterCoolerAutoControl(bool enabled);
   void resetDataCollectionTimeout();
   QVariantMap exportFanData( const FanData &fanData );
 

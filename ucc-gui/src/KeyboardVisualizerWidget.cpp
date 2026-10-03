@@ -14,6 +14,7 @@
  */
 
 #include "KeyboardVisualizerWidget.hpp"
+#include "FluentTheme.hpp"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -52,11 +53,17 @@ KeyboardVisualizerWidget::KeyboardVisualizerWidget( int zones, int maxBrightness
   }
 
   setupKeyboardLayout();
+  connect(FluentTheme::events(),&FluentTheme::ThemeEvents::changed,this,[this]{
+    for(auto *button:m_keyboardWidget->findChildren<QPushButton*>()) {
+      const int zone=button->property("zoneId").toInt();
+      if(zone>=0 && zone<static_cast<int>(m_keys.size())) updateKeyAppearance(button,m_keys[zone].color,m_keys[zone].brightness);
+    }
+  });
 
   // Initialize color dialog
   m_colorDialog = new QColorDialog( this );
   m_colorDialog->setOption( QColorDialog::ShowAlphaChannel, false );
-  m_colorDialog->setOption( QColorDialog::DontUseNativeDialog, false );
+  m_colorDialog->setOption( QColorDialog::DontUseNativeDialog, true );
 
   connect( m_colorDialog, &QColorDialog::colorSelected, this, &KeyboardVisualizerWidget::onColorChanged );
 }
@@ -74,8 +81,8 @@ void KeyboardVisualizerWidget::setupKeyboardLayout()
 
   m_keyboardWidget = new QWidget();
   m_layout = new QGridLayout( m_keyboardWidget );
-  m_layout->setSpacing( 2 );
-  m_layout->setContentsMargins( 10, 10, 10, 10 );
+  m_layout->setSpacing(4);
+  m_layout->setContentsMargins(0,0,0,0);
 
   // Create a realistic German QWERTZ keyboard layout
   // Row 0: Esc + F1-F12 + PrintScreen + Insert + Delete
@@ -189,7 +196,7 @@ void KeyboardVisualizerWidget::setupKeyboardLayout()
 
   // Instructions label
   QLabel *instructions = new QLabel( "Click on keys to select and change their color. Hold Ctrl to select multiple keys. Use global controls for all keys." );
-  instructions->setStyleSheet( "font-size: 11px; color: #888; margin-top: 5px;" );
+  instructions->setObjectName("muted");
   instructions->setWordWrap( true );
   mainLayout->addWidget( instructions );
 }
@@ -228,47 +235,13 @@ void ucc::KeyboardVisualizerWidget::onKeyClicked()
   // Check if Ctrl is pressed for multi-select
   bool isMultiSelect = QApplication::keyboardModifiers() & Qt::ControlModifier;
 
-  if ( !isMultiSelect )
-  {
-    // Clear previous selections
-    for ( QPushButton *selectedBtn : m_selectedButtons )
-    {
-      QString style = selectedBtn->styleSheet();
-      style.replace( "border: 3px solid #ff0000;", "border: 1px solid #666;" );
-      selectedBtn->setStyleSheet( style );
-    }
-    m_selectedZoneIds.clear();
-    m_selectedButtons.clear();
+  if(!isMultiSelect){m_selectedZoneIds.clear();m_selectedButtons.clear();}
+  if(m_selectedButtons.contains(button)){m_selectedZoneIds.remove(zoneId);m_selectedButtons.remove(button);}
+  else{m_selectedZoneIds.insert(zoneId);m_selectedButtons.insert(button);}
+  for(auto *key:m_keyboardWidget->findChildren<QPushButton*>()) {
+    const int zone=key->property("zoneId").toInt();
+    if(zone>=0 && zone<static_cast<int>(m_keys.size())) updateKeyAppearance(key,m_keys[zone].color,m_keys[zone].brightness);
   }
-
-  // Toggle selection for this key
-  if ( m_selectedButtons.contains( button ) )
-  {
-    // Deselect
-    m_selectedZoneIds.remove( zoneId );
-    m_selectedButtons.remove( button );
-    QString style = button->styleSheet();
-    style.replace( "border: 3px solid #ff0000;", "border: 1px solid #666;" );
-    button->setStyleSheet( style );
-  }
-  else
-  {
-    // Select
-    m_selectedZoneIds.insert( zoneId );
-    m_selectedButtons.insert( button );
-    QString currentStyle = button->styleSheet();
-    if ( !currentStyle.contains( "border:" ) )
-    {
-      currentStyle += "border: 3px solid #ff0000;";
-    }
-    else
-    {
-      currentStyle.replace( QRegularExpression( "border: \\d+px solid #[0-9a-fA-F]+;" ), "border: 3px solid #ff0000;" );
-    }
-    button->setStyleSheet( currentStyle );
-  }
-
-  emit keySelected( zoneId );
 
   // Show color dialog for selected keys
   if ( !m_selectedZoneIds.isEmpty() )
@@ -307,9 +280,14 @@ void ucc::KeyboardVisualizerWidget::onColorChanged( const QColor &color )
 void ucc::KeyboardVisualizerWidget::updateKeyAppearance( QPushButton *button, const QColor &color, int brightness )
 {
   QColor adjustedColor = applyBrightness( color, brightness );
-  QString style = QString( "background-color: %1; color: %2; border: 1px solid #666; border-radius: 3px;" )
-                  .arg( adjustedColor.name() )
-                  .arg( adjustedColor.lightness() > 128 ? "#000000" : "#ffffff" );
+  const auto c=FluentTheme::colors();
+  const double weight=FluentTheme::isDark() ? 0.18 : 0.12;
+  const auto blend=[&](const QColor &base,double fraction){return QColor(qRound(base.red()*(1-fraction)+adjustedColor.red()*fraction),qRound(base.green()*(1-fraction)+adjustedColor.green()*fraction),qRound(base.blue()*(1-fraction)+adjustedColor.blue()*fraction));};
+  const QColor tint=blend(c.inset,weight);
+  const QColor edge=blend(c.border,0.25);
+  const QString border=m_selectedButtons.contains(button) ? "2px solid "+c.accent.name() : "1px solid "+edge.name();
+  const QString style=QString("QPushButton {background-color: %1; color: %2; border: %3; border-radius: 4px; padding: 2px;} QPushButton:hover {background-color: %4;}").arg(tint.name(),c.text.name(),border,FluentTheme::isDark() ? tint.lighter(120).name() : tint.darker(104).name());
+  button->setToolTip(QString("%1 · %2").arg(button->text(),adjustedColor.name()));
   button->setStyleSheet( style );
 }
 

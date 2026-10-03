@@ -1,3 +1,5 @@
+#include "FluentTheme.hpp"
+#include <QScrollArea>
 /*
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,13 +38,13 @@ namespace ucc
 
 void MainWindow::connectKeyboardBacklightPageWidgets()
 {
-  connect( m_keyboardBrightnessSlider, &QSlider::valueChanged,
+  if(m_keyboardBrightnessSlider) connect( m_keyboardBrightnessSlider, &QSlider::valueChanged,
            this, &MainWindow::onKeyboardBrightnessChanged );
 
-  connect( m_keyboardColorButton, &QPushButton::clicked,
+  if(m_keyboardColorButton) connect( m_keyboardColorButton, &QPushButton::clicked,
            this, &MainWindow::onKeyboardColorClicked );
 
-  connect( m_keyboardVisualizer, &KeyboardVisualizerWidget::colorsChanged,
+  if(m_keyboardVisualizer) connect( m_keyboardVisualizer, &KeyboardVisualizerWidget::colorsChanged,
            this, &MainWindow::onKeyboardVisualizerColorsChanged );
 
   connect( m_keyboardProfileCombo, QOverload< int >::of( &QComboBox::currentIndexChanged ),
@@ -69,13 +71,16 @@ void MainWindow::connectKeyboardBacklightPageWidgets()
 
 void MainWindow::setupKeyboardBacklightPage()
 {
-  QGroupBox *keyboardWidget = new QGroupBox( "Keyboard Controls" );
-  QVBoxLayout *mainLayout = new QVBoxLayout( keyboardWidget );
+  auto *page=new QWidget();auto *pageLayout=new QVBoxLayout(page);pageLayout->setContentsMargins(0,0,0,0);
+  auto *scroll=new QScrollArea(page);scroll->setWidgetResizable(true);pageLayout->addWidget(scroll);
+  auto *keyboardWidget=new QWidget();scroll->setWidget(keyboardWidget);
+  auto *mainLayout=new QVBoxLayout(keyboardWidget);mainLayout->setContentsMargins(0,0,0,0);mainLayout->setSpacing(16);
+  auto *profileCard=FluentTheme::createCard();
 
   // Keyboard profile controls
-  QHBoxLayout *profileLayout = new QHBoxLayout();
-  profileLayout->setContentsMargins( 5, 5, 5, 5 );
-  profileLayout->setSpacing( 0 );
+  auto *profileLayout=new QHBoxLayout(profileCard);
+  profileLayout->setContentsMargins(24,16,24,16);
+  profileLayout->setSpacing(12);
   QLabel *profileLabel = new QLabel( "Keyboard Profile:" );
   m_keyboardProfileCombo = new QComboBox();
   m_keyboardProfileCombo->setEditable( true );
@@ -90,6 +95,7 @@ void MainWindow::setupKeyboardBacklightPage()
 
   m_copyKeyboardProfileButton = new QPushButton("Copy");
   m_saveKeyboardProfileButton = new QPushButton("Save");
+  m_saveKeyboardProfileButton->setProperty("primary",true);
   m_removeKeyboardProfileButton = new QPushButton("Remove");
 
   profileLayout->addWidget( profileLabel );
@@ -97,14 +103,12 @@ void MainWindow::setupKeyboardBacklightPage()
   profileLayout->addWidget( m_copyKeyboardProfileButton );
   profileLayout->addWidget( m_saveKeyboardProfileButton );
   profileLayout->addWidget( m_removeKeyboardProfileButton );
-  profileLayout->addStretch();
-  mainLayout->addLayout( profileLayout );
+  mainLayout->addWidget(profileCard);
 
-  // Add a separator line
-  QFrame *separator = new QFrame();
-  separator->setFrameShape( QFrame::HLine );
-  separator->setStyleSheet( "color: #cccccc;" );
-  mainLayout->addWidget( separator );
+  auto *lightingCard=FluentTheme::createCard();auto *lightingLayout=new QVBoxLayout(lightingCard);
+  lightingLayout->setContentsMargins(20,18,20,18);lightingLayout->setSpacing(16);
+  auto *lightingTitle=new QLabel("Keyboard backlight");lightingTitle->setObjectName("cardTitle");lightingLayout->addWidget(lightingTitle);
+  mainLayout->addWidget(lightingCard);
 
   // Check if keyboard backlight is supported
   if ( auto info = m_UccdClient->getKeyboardBacklightInfo() )
@@ -122,8 +126,8 @@ void MainWindow::setupKeyboardBacklightPage()
       if ( zones > 0 )
       {
         QHBoxLayout *brightnessLayout = new QHBoxLayout();
-        brightnessLayout->setContentsMargins( 5, 5, 5, 5 );
-        brightnessLayout->setSpacing( 0 );
+        brightnessLayout->setContentsMargins(0,16,0,0);
+        brightnessLayout->setSpacing(12);
 
         QLabel *brightnessLabel = new QLabel( "Brightness:" );
         m_keyboardBrightnessSlider = new QSlider( Qt::Horizontal );
@@ -136,40 +140,45 @@ void MainWindow::setupKeyboardBacklightPage()
         brightnessLayout->addWidget( brightnessLabel );
         brightnessLayout->addWidget( m_keyboardBrightnessSlider );
         brightnessLayout->addWidget( m_keyboardBrightnessValueLabel );
+        FluentTheme::styleSliderRow(brightnessLayout,m_keyboardBrightnessValueLabel);
 
         // Global color controls for RGB keyboards
         if ( maxRed > 0 && maxGreen > 0 && maxBlue > 0 )
         {
           m_keyboardColorLabel = new QLabel( "Color:" );
+          m_keyboardColorLabel->setObjectName("muted");
           m_keyboardColorButton = new QPushButton( "Choose Color" );
           brightnessLayout->addWidget( m_keyboardColorLabel );
           brightnessLayout->addWidget( m_keyboardColorButton );
         }
 
-        mainLayout->addLayout( brightnessLayout );
+
 
         // Keyboard visualizer
         if ( zones > 1 )
         {
           m_keyboardVisualizer = new KeyboardVisualizerWidget( zones, maxBrightness, keyboardWidget );
-          mainLayout->addWidget( m_keyboardVisualizer );
+          lightingLayout->addWidget(m_keyboardVisualizer);
+          m_keyboardVisualizer->setMinimumHeight(300);m_keyboardVisualizer->setMaximumHeight(380);
         }
+        lightingLayout->addLayout(brightnessLayout);
       }
       else
       {
         QLabel *noSupportLabel = new QLabel( "Keyboard backlight not supported on this device." );
-        mainLayout->addWidget( noSupportLabel );
+        lightingLayout->addWidget(noSupportLabel);
       }
     }
   }
   else
   {
     QLabel *noSupportLabel = new QLabel( "Keyboard backlight not available." );
-    mainLayout->addWidget( noSupportLabel );
+    lightingLayout->addWidget(noSupportLabel);
   }
 
-  const int tabIndex = m_tabs->addTab( keyboardWidget, "Keyboard and Hardware" );
-  m_hardwareTab = new HardwareTab( m_systemMonitor.get(), m_tabs->widget( tabIndex ) );
+  m_tabs->addTab(page,"Keyboard and Hardware");
+  m_hardwareTab=new HardwareTab(m_systemMonitor.get(),keyboardWidget);
+  mainLayout->addStretch();
 }
 
 void MainWindow::reloadKeyboardProfiles()
@@ -219,9 +228,28 @@ void MainWindow::updateKeyboardProfileButtonStates()
   m_removeKeyboardProfileButton->setEnabled( canRemove );
 }
 
+void MainWindow::updateKeyboardAppearanceLabels()
+{
+  if (m_keyboardBrightnessSlider && m_keyboardBrightnessValueLabel) {
+    const int value = m_keyboardBrightnessSlider->value();
+    const int maximum = m_keyboardBrightnessSlider->maximum();
+    m_keyboardBrightnessValueLabel->setText(QString::number(maximum > 0 ? qRound(100.0 * value / maximum) : 0) + "%");
+    m_keyboardBrightnessValueLabel->setToolTip(QString("Device value: %1 / %2").arg(value).arg(maximum));
+  }
+  if (m_keyboardVisualizer && m_keyboardColorLabel) {
+    const auto states = m_keyboardVisualizer->getJSONState();
+    if (states.isEmpty()) return;
+    auto colorOf = [](const QJsonValue &value) { auto state = value.toObject(); return QColor(state["red"].toInt(),state["green"].toInt(),state["blue"].toInt()); };
+    const auto color = colorOf(states.first());
+    bool uniform = true;
+    for (const auto &state : states) uniform &= colorOf(state) == color;
+    m_keyboardColorLabel->setText(uniform ? "Color: " + color.name().toUpper() : "Color: Mixed");
+  }
+}
+
 void MainWindow::onKeyboardBrightnessChanged( int value )
 {
-  m_keyboardBrightnessValueLabel->setText( QString::number( value ) );
+  updateKeyboardAppearanceLabels();
 
   if ( m_initializing )
     return;
@@ -246,7 +274,7 @@ void MainWindow::onKeyboardBrightnessChanged( int value )
 void MainWindow::onKeyboardColorClicked()
 {
   // Open color dialog
-  QColor color = QColorDialog::getColor( Qt::white, this, "Choose Keyboard Color" );
+  QColor color = QColorDialog::getColor( Qt::white, this, "Choose Keyboard Color", QColorDialog::DontUseNativeDialog );
   if ( color.isValid() )
   {
     // Update visualizer if it exists
@@ -279,6 +307,7 @@ void MainWindow::onKeyboardColorClicked()
 
 void MainWindow::onKeyboardVisualizerColorsChanged()
 {
+  updateKeyboardAppearanceLabels();
   if ( m_initializing )
     return;
 
@@ -369,7 +398,7 @@ void MainWindow::onKeyboardProfileChanged(const QString& profileId)
       m_keyboardBrightnessSlider->blockSignals( true );
       m_keyboardBrightnessSlider->setValue( brightness );
       m_keyboardBrightnessSlider->blockSignals( false );
-      m_keyboardBrightnessValueLabel->setText( QString::number( brightness ) );
+      updateKeyboardAppearanceLabels();
     }
     if ( m_keyboardVisualizer )
     {

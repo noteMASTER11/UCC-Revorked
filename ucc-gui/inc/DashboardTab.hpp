@@ -16,6 +16,7 @@
 #pragma once
 
 #include <QWidget>
+#include <QCheckBox>
 #include <QFrame>
 #include <QLabel>
 #include <QPushButton>
@@ -24,6 +25,7 @@
 #include <QGridLayout>
 #include <QDBusInterface>
 #include <QTimer>
+#include <QComboBox>
 
 namespace ucc
 {
@@ -79,8 +81,6 @@ namespace ucc
     void onWaterCoolerDiscoveryStarted();
     void onWaterCoolerDiscoveryFinished();
     void onWaterCoolerConnectionError(const QString &error);
-    void onWaterCoolerFanSpeedChanged();
-    void onWaterCoolerPumpLevelChanged();
 
   private:
     void setupUI();
@@ -117,11 +117,14 @@ namespace ucc
     QLabel *m_gpuClockOffsetLabel = nullptr;
     QWidget *m_dGpuExtraRow  = nullptr;
     QFrame  *m_dGpuExtraHSep = nullptr;
-    QLabel *m_waterCoolerFanSpeedLabel = nullptr;
-    QLabel *m_waterCoolerPumpLabel = nullptr;
+    QComboBox *m_waterCoolerFanSelector = nullptr;
+    QComboBox *m_waterCoolerPumpSelector = nullptr;
+    bool m_previewFanEdited = false;
+    bool m_previewPumpEdited = false;
+    bool m_waterCoolerAutoControl = true;
     QGridLayout *m_waterCoolerGrid = nullptr;
     QLabel *m_waterCoolerHeader = nullptr;
-    QPushButton *m_waterCoolerEnableCheckBox = nullptr;
+    QCheckBox *m_waterCoolerEnableCheckBox = nullptr;
 
     bool m_waterCoolerSupported = false;
 

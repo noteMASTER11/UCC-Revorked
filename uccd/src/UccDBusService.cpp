@@ -548,7 +548,7 @@ QString UccDBusInterfaceAdaptor::GetActiveProfileJSON()
 
 bool UccDBusInterfaceAdaptor::SetFanProfileCPU( const QString &pointsJSON )
 {
-  if ( !checkAuth( PolkitAuthority::ACTION_MANAGE_HARDWARE ) ) return false;
+  if ( !checkAuth( PolkitAuthority::ACTION_CONTROL ) ) return false;
   if ( !m_service )
     return false;
 
@@ -590,7 +590,7 @@ bool UccDBusInterfaceAdaptor::SetFanProfileCPU( const QString &pointsJSON )
 
 bool UccDBusInterfaceAdaptor::SetFanProfileDGPU( const QString &pointsJSON )
 {
-  if ( !checkAuth( PolkitAuthority::ACTION_MANAGE_HARDWARE ) ) return false;
+  if ( !checkAuth( PolkitAuthority::ACTION_CONTROL ) ) return false;
   if ( !m_service )
     return false;
 
@@ -632,7 +632,7 @@ bool UccDBusInterfaceAdaptor::SetFanProfileDGPU( const QString &pointsJSON )
 
 bool UccDBusInterfaceAdaptor::ApplyFanProfiles( const QString &fanProfilesJSONq )
 {
-  if ( !checkAuth( PolkitAuthority::ACTION_MANAGE_HARDWARE ) ) return false;
+  if ( !checkAuth( PolkitAuthority::ACTION_CONTROL ) ) return false;
   if ( not m_service )
     return false;
 
@@ -712,7 +712,7 @@ bool UccDBusInterfaceAdaptor::ApplyFanProfiles( const QString &fanProfilesJSONq 
 
 bool UccDBusInterfaceAdaptor::RevertFanProfiles()
 {
-  if ( !checkAuth( PolkitAuthority::ACTION_MANAGE_HARDWARE ) ) return false;
+  if ( !checkAuth( PolkitAuthority::ACTION_CONTROL ) ) return false;
   if ( !m_service )
     return false;
 
@@ -756,7 +756,7 @@ bool UccDBusInterfaceAdaptor::SetActiveProfile( const QString &id )
 
 bool UccDBusInterfaceAdaptor::ApplyProfile( const QString &profileJSON )
 {
-  if ( !checkAuth( PolkitAuthority::ACTION_MANAGE_HARDWARE ) ) return false;
+  if ( !checkAuth( PolkitAuthority::ACTION_CONTROL ) ) return false;
   // Apply the profile configuration sent by the GUI
   return m_service->applyProfileJSON( profileJSON.toStdString() );
 }
@@ -931,7 +931,7 @@ bool UccDBusInterfaceAdaptor::UpdateCustomProfile( const QString &profileJSON )
 
 bool UccDBusInterfaceAdaptor::SaveCustomProfile( const QString &profileJSON )
 {
-  if ( !checkAuth( PolkitAuthority::ACTION_MANAGE_HARDWARE ) ) return false;
+  if ( !checkAuth( PolkitAuthority::ACTION_CONTROL ) ) return false;
   if ( !m_service )
   {
     std::cerr << "[Profile] SaveCustomProfile called but service not available" << std::endl;
@@ -1250,7 +1250,7 @@ bool UccDBusInterfaceAdaptor::SetStateMap( const QString &state, const QString &
 
 bool UccDBusInterfaceAdaptor::SetBatchStateMap( const QString &stateMapJSON )
 {
-  if ( !checkAuth( PolkitAuthority::ACTION_MANAGE_HARDWARE ) ) return false;
+  if ( !checkAuth( PolkitAuthority::ACTION_CONTROL ) ) return false;
   if ( !m_service )
     return false;
 
@@ -1434,7 +1434,7 @@ bool UccDBusInterfaceAdaptor::SetKeyboardBacklightStatesJSON( const QString &key
   }
 
   // Keep the assigned custom profile in sync silently so startup replays the current color
-  // without requiring an explicit SaveCustomProfile (and its Polkit password dialog).
+  // without requiring an explicit SaveCustomProfile.
   if ( auto it = std::ranges::find_if( m_service->m_customProfiles,
                          [ & ]( const UccProfile &p ) { return p.id == m_service->m_activeProfile.id; } );
        it != m_service->m_customProfiles.end() )
@@ -1472,7 +1472,7 @@ QString UccDBusInterfaceAdaptor::GetCustomKeyboardProfilesJSON()
 
 bool UccDBusInterfaceAdaptor::SaveCustomKeyboardProfile( const QString &id, const QString &name, const QString &json )
 {
-  if ( !checkAuth( PolkitAuthority::ACTION_MANAGE_HARDWARE ) ) return false;
+  if ( !checkAuth( PolkitAuthority::ACTION_CONTROL ) ) return false;
   if ( id.isEmpty() || json.isEmpty() ) return false;
 
   const std::string idStr = id.toStdString();
@@ -1490,7 +1490,7 @@ bool UccDBusInterfaceAdaptor::SaveCustomKeyboardProfile( const QString &id, cons
 
 bool UccDBusInterfaceAdaptor::DeleteCustomKeyboardProfile( const QString &id )
 {
-  if ( !checkAuth( PolkitAuthority::ACTION_MANAGE_HARDWARE ) ) return false;
+  if ( !checkAuth( PolkitAuthority::ACTION_CONTROL ) ) return false;
   if ( id.isEmpty() ) return false;
 
   const std::string idStr = id.toStdString();
@@ -1520,7 +1520,7 @@ QString UccDBusInterfaceAdaptor::GetCustomFanProfilesJSON()
 
 bool UccDBusInterfaceAdaptor::SaveCustomFanProfile( const QString &id, const QString &name, const QString &json )
 {
-  if ( !checkAuth( PolkitAuthority::ACTION_MANAGE_HARDWARE ) ) return false;
+  if ( !checkAuth( PolkitAuthority::ACTION_CONTROL ) ) return false;
   if ( id.isEmpty() || json.isEmpty() ) return false;
 
   const std::string idStr = id.toStdString();
@@ -1533,7 +1533,7 @@ bool UccDBusInterfaceAdaptor::SaveCustomFanProfile( const QString &id, const QSt
 
 bool UccDBusInterfaceAdaptor::DeleteCustomFanProfile( const QString &id )
 {
-  if ( !checkAuth( PolkitAuthority::ACTION_MANAGE_HARDWARE ) ) return false;
+  if ( !checkAuth( PolkitAuthority::ACTION_CONTROL ) ) return false;
   if ( id.isEmpty() ) return false;
 
   const std::string idStr = id.toStdString();
@@ -1848,7 +1848,11 @@ bool UccDBusInterfaceAdaptor::SetWaterCoolerFanSpeed( int dutyCyclePercent )
   if ( dutyCyclePercent < 0 || dutyCyclePercent > 100 )
     return false;
   if ( m_service && m_service->m_waterCoolerWorker )
-    return m_service->m_waterCoolerWorker->setFanSpeed( dutyCyclePercent );
+  {
+    if (!m_service->m_waterCoolerWorker->setFanSpeed(dutyCyclePercent)) return false;
+    updateWaterCoolerAutoControl(false);
+    return true;
+  }
 
   return false;
 }
@@ -1860,7 +1864,11 @@ bool UccDBusInterfaceAdaptor::SetWaterCoolerPumpVoltage( int voltage )
   if ( voltage != 0 && voltage != 2 && voltage != 3 && voltage != 4 )
     return false;
   if ( m_service && m_service->m_waterCoolerWorker )
-    return m_service->m_waterCoolerWorker->setPumpVoltage( voltage );
+  {
+    if (!m_service->m_waterCoolerWorker->setPumpVoltage(voltage)) return false;
+    updateWaterCoolerAutoControl(false);
+    return true;
+  }
 
   return false;
 }
@@ -1910,6 +1918,24 @@ bool UccDBusInterfaceAdaptor::TurnOffWaterCoolerPump()
     return m_service->m_waterCoolerWorker->turnOffPump();
   }
   return false;
+}
+
+void UccDBusInterfaceAdaptor::updateWaterCoolerAutoControl(bool enabled)
+{
+  if (m_service->m_activeProfile.fan.autoControlWC == enabled) return;
+  m_service->m_activeProfile.fan.autoControlWC = enabled;
+  m_service->updateDBusActiveProfileData();
+  emitProfileChanged(m_service->m_activeProfile.id,
+                     m_service->m_activeProfile.keyboard.keyboardProfileId,
+                     m_service->m_activeProfile.fan.fanProfile);
+}
+
+bool UccDBusInterfaceAdaptor::SetWaterCoolerAutoControl(bool enabled)
+{
+  if ( !checkAuth( PolkitAuthority::ACTION_CONTROL ) ) return false;
+  if (!m_service) return false;
+  updateWaterCoolerAutoControl(enabled);
+  return true;
 }
 
 bool UccDBusInterfaceAdaptor::IsWaterCoolerAutoControlEnabled()

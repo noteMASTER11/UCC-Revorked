@@ -47,6 +47,7 @@
 
 namespace ucc
 {
+  class FluentEntrance;
   /**
    * @brief Main application window with C++ Qt widgets
    */
@@ -100,6 +101,7 @@ namespace ucc
 
     // Dashboard page slots
     void onTabChanged( int index );
+    void updateKeyboardAppearanceLabels();
     void onKeyboardBrightnessChanged( int value );
     void onKeyboardColorClicked();
     void onKeyboardVisualizerColorsChanged();
@@ -156,6 +158,7 @@ namespace ucc
 
     // Tab widget
     QTabWidget *m_tabs = nullptr;
+    FluentEntrance *m_entrance = nullptr;
 
     // Dashboard tab
     DashboardTab *m_dashboardTab = nullptr;

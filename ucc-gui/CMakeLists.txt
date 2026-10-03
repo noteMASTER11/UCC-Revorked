@@ -28,6 +28,12 @@ find_package( Qt6 REQUIRED COMPONENTS
 
 # Application sources
 set( UCC_GUI_SOURCES
+  resources/fluent.qrc
+  src/FluentEntrance.cpp inc/FluentEntrance.hpp
+  src/FluentSidebar.cpp
+  inc/FluentSidebar.hpp
+  src/FluentTheme.cpp
+  inc/FluentTheme.hpp
   src/main.cpp
   src/GuiInstance.cpp
   inc/GuiInstance.hpp
@@ -82,6 +88,11 @@ target_include_directories( ucc-gui PRIVATE
 target_link_libraries( ucc-gui PRIVATE
   ${UCC_GUI_LIBRARIES}
 )
+
+if(TARGET PkgConfig::UCC_XCB)
+  target_link_libraries(ucc-gui PRIVATE PkgConfig::UCC_XCB)
+  target_compile_definitions(ucc-gui PRIVATE UCC_HAS_X11_BLUR)
+endif()
 
 target_compile_options( ucc-gui PRIVATE
   -Wall

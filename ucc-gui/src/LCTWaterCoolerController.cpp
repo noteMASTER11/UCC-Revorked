@@ -1,3 +1,4 @@
+#include "PreviewMode.hpp"
 /*
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,6 +18,7 @@
 
 #include <QDBusInterface>
 #include <QDBusReply>
+#include <QDBusConnectionInterface>
 #include <QTimer>
 #include <QVariant>
 #include <QDebug>
@@ -34,7 +36,12 @@ LCTWaterCoolerController::LCTWaterCoolerController(QObject *parent)
     m_isConnected = false;
 
     // DBus interface to daemon
-    m_dbus = std::make_unique<QDBusInterface>(QStringLiteral("com.uniwill.uccd"),
+    QString destination = QStringLiteral("com.uniwill.uccd");
+    if (ucc::readOnlyPreview) {
+        auto *bus = QDBusConnection::systemBus().interface();
+        destination = bus ? bus->serviceOwner(destination).value() : QString();
+    }
+    if (!destination.isEmpty()) m_dbus = std::make_unique<QDBusInterface>(destination,
                                              QStringLiteral("/com/uniwill/uccd"),
                                              QStringLiteral("com.uniwill.uccd"),
                                              QDBusConnection::systemBus(), this);
@@ -137,6 +144,7 @@ LCTDeviceModel LCTWaterCoolerController::getConnectedModel() const
 
 bool LCTWaterCoolerController::setFanSpeed(int dutyCyclePercent)
 {
+    if (ucc::readOnlyPreview) return false;
     if (!m_dbus || !m_dbus->isValid() || dutyCyclePercent < 0 || dutyCyclePercent > 100)
         return false;
 
@@ -146,6 +154,7 @@ bool LCTWaterCoolerController::setFanSpeed(int dutyCyclePercent)
 
 bool LCTWaterCoolerController::setPumpVoltage(PumpVoltage voltage)
 {
+    if (ucc::readOnlyPreview) return false;
     if (!m_dbus || !m_dbus->isValid())
         return false;
 
@@ -156,6 +165,7 @@ bool LCTWaterCoolerController::setPumpVoltage(PumpVoltage voltage)
 
 bool LCTWaterCoolerController::turnOffFan()
 {
+    if (ucc::readOnlyPreview) return false;
     if (!m_dbus || !m_dbus->isValid())
         return false;
 
@@ -165,6 +175,7 @@ bool LCTWaterCoolerController::turnOffFan()
 
 bool LCTWaterCoolerController::turnOffPump()
 {
+    if (ucc::readOnlyPreview) return false;
     if (!m_dbus || !m_dbus->isValid())
         return false;
 
@@ -174,6 +185,7 @@ bool LCTWaterCoolerController::turnOffPump()
 
 bool LCTWaterCoolerController::setLEDColor(int red, int green, int blue, RGBState mode)
 {
+    if (ucc::readOnlyPreview) return false;
     if (!m_dbus || !m_dbus->isValid())
         return false;
 
@@ -183,6 +195,7 @@ bool LCTWaterCoolerController::setLEDColor(int red, int green, int blue, RGBStat
 
 bool LCTWaterCoolerController::turnOffLED()
 {
+    if (ucc::readOnlyPreview) return false;
     if (!m_dbus || !m_dbus->isValid())
         return false;
 

@@ -140,7 +140,7 @@ void PumpCurveEditorWidget::paintEvent(QPaintEvent*) {
         p.setFont(titleFont);
         p.setPen(labelColor);
         QRectF titleRect(left, 2, width() - left - right, top - 4);
-        p.drawText(titleRect, Qt::AlignCenter, m_title);
+        p.drawText(titleRect, Qt::AlignLeft | Qt::AlignVCenter, m_title);
     }
 
     QRectF plotRect(left, top, width() - left - right, height() - top - bottom);

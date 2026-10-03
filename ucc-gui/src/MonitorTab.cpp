@@ -1,3 +1,5 @@
+#include "PreviewMode.hpp"
+#include "FluentTheme.hpp"
 /*
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,9 +26,11 @@
 #include <QToolTip>
 #include <QDir>
 #include <QSettings>
+#include <QRegularExpression>
 #include <QMainWindow>
 #include <QStatusBar>
 #include <QApplication>
+#include <QGraphicsLayout>
 #include <cstring>
 #include <algorithm>
 #include <functional>
@@ -75,16 +79,16 @@ static constexpr int METRIC_COUNT = 10;
 // Order matches MetricId enum in MetricsHistoryStore.hpp
 static const MetricDef kMetrics[ METRIC_COUNT ] =
 {
-  { "cpuTemp",             "CPU Temp",            QColor( 124, 179, 66 ),  MetricGroup::Temp  },
-  { "cpuFanDuty",          "CPU Fan Duty",        QColor( 255, 193, 7 ),   MetricGroup::Duty  },
-  { "cpuPower",            "CPU Power",           QColor( 102, 187, 106 ), MetricGroup::Power },
-  { "cpuFrequency",        "CPU Frequency",       QColor( 0, 200, 83 ),    MetricGroup::Freq  },
-  { "gpuTemp",             "dGPU Temp",           QColor( 0, 230, 118 ),   MetricGroup::Temp  },
-  { "gpuFanDuty",          "dGPU Fan Duty",       QColor( 0, 188, 212 ),   MetricGroup::Duty  },
-  { "gpuPower",            "dGPU Power",          QColor( 171, 71, 188 ),  MetricGroup::Power },
-  { "gpuFrequency",        "dGPU Frequency",      QColor( 255, 167, 38 ),  MetricGroup::Freq  },
-  { "gpuVramFrequency",    "dGPU VRAM Freq",      QColor( 46, 204, 113 ),  MetricGroup::Freq  },
-  { "gpuCoreVoltage",      "dGPU Core Voltage",   QColor( 174, 234, 0 ),   MetricGroup::Volt  },
+  { "cpuTemp",             "CPU Temp",            QColor("#0067C0"),  MetricGroup::Temp  },
+  { "cpuFanDuty",          "CPU Fan Duty",        QColor("#0067C0"),   MetricGroup::Duty  },
+  { "cpuPower",            "CPU Power",           QColor("#0067C0"), MetricGroup::Power },
+  { "cpuFrequency",        "CPU Frequency",       QColor("#0067C0"),    MetricGroup::Freq  },
+  { "gpuTemp",             "dGPU Temp",           QColor("#008C95"),   MetricGroup::Temp  },
+  { "gpuFanDuty",          "dGPU Fan Duty",       QColor("#008C95"),   MetricGroup::Duty  },
+  { "gpuPower",            "dGPU Power",          QColor("#008C95"),  MetricGroup::Power },
+  { "gpuFrequency",        "dGPU Frequency",      QColor("#008C95"),  MetricGroup::Freq  },
+  { "gpuVramFrequency",    "dGPU VRAM Freq",      QColor("#7956B8"),  MetricGroup::Freq  },
+  { "gpuCoreVoltage",      "dGPU Core Voltage",   QColor("#008C95"),   MetricGroup::Volt  },
 };
 
 // Helpers
@@ -157,37 +161,48 @@ void MonitorTab::initializeMaxPowerFromHardware()
     m_maxPowerW = 200;  // Fallback to default
 }
 
+static QColor metricColor(const MetricDef &metric) {
+  if(!FluentTheme::isDark()) return metric.color;
+  if(QString::fromUtf8(metric.key).startsWith("cpu")) return QColor("#75BAFF");
+  if(QString::fromUtf8(metric.key)=="gpuVramFrequency") return QColor("#C4A4FF");
+  return QColor("#69D4D8");
+}
+
 static QChart *createChart()
 {
   auto *chart = new QChart();
   // Don't set title - will save vertical space for graphs
   chart->setAnimationOptions( QChart::NoAnimation );
-  chart->legend()->setVisible( false );
-  chart->setMargins( QMargins( 4, 4, 4, 4 ) );
+  chart->legend()->setVisible(false);
+  chart->legend()->setAlignment(Qt::AlignTop);
+  QFont legendFont=QApplication::font();legendFont.setPointSize(8);chart->legend()->setFont(legendFont);
+  chart->setMargins(QMargins(0,0,0,0));
+  chart->layout()->setContentsMargins(0,0,0,0);
 
-  // Black chart background
-  chart->setBackgroundBrush( QBrush( Qt::black ) );
-  chart->setPlotAreaBackgroundBrush( QBrush( Qt::black ) );
+  // Light chart background
+  chart->setBackgroundBrush( QBrush( FluentTheme::colors().surface ) );
+  chart->setPlotAreaBackgroundBrush( QBrush( FluentTheme::colors().surface ) );
   chart->setPlotAreaBackgroundVisible( true );
-  chart->setTitleBrush( QBrush( Qt::white ) );
+  chart->setTitleBrush( QBrush( FluentTheme::colors().text ) );
 
   return chart;
 }
 
 static void styleAxis( QAbstractAxis *axis )
 {
-  axis->setLabelsBrush( QBrush( Qt::white ) );
-  axis->setTitleBrush( QBrush( Qt::white ) );
-  QPen linePen( QColor( 100, 100, 100 ) );
+  QFont labels=QApplication::font();labels.setPointSize(8);axis->setLabelsFont(labels);
+  axis->setLabelsBrush( QBrush( FluentTheme::colors().secondary ) );
+  axis->setTitleBrush( QBrush( FluentTheme::colors().text ) );
+  QPen linePen( FluentTheme::colors().border );
   axis->setLinePen( linePen );
-  axis->setGridLinePen( QPen( QColor( 45, 45, 45 ) ) );
+  axis->setGridLinePen( QPen( FluentTheme::colors().border ) );
   axis->setShadesBrush( QBrush( Qt::transparent ) );
 }
 
 static QDateTimeAxis *createXAxis()
 {
   auto *axis = new QDateTimeAxis();
-  axis->setFormat( "HH:mm:ss" );
+  axis->setFormat("HH:mm");
   axis->setTickCount( 6 );
   styleAxis( axis );
   return axis;
@@ -196,7 +211,9 @@ static QDateTimeAxis *createXAxis()
 static QValueAxis *createYAxis( const QString &title, double min, double max )
 {
   auto *axis = new QValueAxis();
-  axis->setTitleText( title );
+  Q_UNUSED(title);
+  axis->setTitleText(QString());
+  axis->setTickCount(3);
   axis->setRange( min, max );
   axis->setLabelFormat( "%.0f" );
   styleAxis( axis );
@@ -207,7 +224,8 @@ static QChartView *createChartView( QChart *chart )
 {
   auto *view = new QChartView( chart );
   view->setRenderHint( QPainter::Antialiasing );
-  view->setMinimumHeight( 180 );
+  view->setMinimumHeight(90);
+  view->setFrameShape(QFrame::NoFrame);
   return view;
 }
 
@@ -219,17 +237,86 @@ MonitorTab::MonitorTab( UccdClient *client, QWidget *parent )
 {
   initializeMaxPowerFromHardware();
   setupUI();
+  connect(FluentTheme::events(),&FluentTheme::ThemeEvents::changed,this,&MonitorTab::refreshTheme);
+  refreshTheme();
 
   setFocusPolicy( Qt::StrongFocus );  // Enable keyboard events for spacebar pause
 
   m_fetchTimer.setInterval( 2000 );
   connect( &m_fetchTimer, &QTimer::timeout, this, &MonitorTab::fetchData );
+  // Scroll the view independently of polling. Values remain real samples;
+  // the one-poll presentation delay reveals their connecting segments smoothly.
+  m_frameTimer.setInterval( 16 );
+  m_frameTimer.setTimerType( Qt::PreciseTimer );
+  connect( &m_frameTimer, &QTimer::timeout, this, &MonitorTab::renderFrame );
+}
+
+void MonitorTab::refreshTheme() {
+  const auto c=FluentTheme::colors();
+  for(auto *chart:{m_tempChart,m_dutyChart,m_powerChart,m_freqChart,m_voltChart,m_unifiedChart}) {
+    if(!chart) continue;
+    chart->setBackgroundBrush(c.surface);chart->setPlotAreaBackgroundBrush(c.surface);chart->setTitleBrush(c.text);
+    for(auto *axis:chart->axes()) styleAxis(axis);
+    for(auto *abstract:chart->series()) if(auto *series=qobject_cast<QLineSeries*>(abstract)) {
+      const int index=metricIndexForKey(series->property("_metricKey").toString().toStdString());
+      if(index>=0){auto pen=series->pen();pen.setColor(metricColor(kMetrics[index]));series->setPen(pen);}
+    }
+  }
+  for(auto *swatch:findChildren<QFrame*>()) if(swatch->property("metricIndex").isValid())
+    swatch->setStyleSheet("border: none; border-radius: 1px; background: "+metricColor(kMetrics[swatch->property("metricIndex").toInt()]).name()+";");
+  for(auto &[chart,callout]:m_callouts) {
+    Q_UNUSED(chart);callout.bg->setBrush(c.inset);callout.bg->setPen(QPen(c.border));callout.text->setBrush(c.text);
+  }
+  for(auto &mark:m_stickyMarks) {
+    for(size_t i=0;i<mark.groupGfxList.size();++i) {
+      auto &gfx=mark.groupGfxList[i];if(!gfx.bg) continue;
+      const int index=metricIndexForKey(mark.entries[i].metricKey);
+      gfx.bg->setBrush(c.inset);gfx.bg->setPen(QPen(index>=0 ? metricColor(kMetrics[index]) : c.border,2));gfx.text->setBrush(c.text);
+    }
+    if(mark.uniBg){mark.uniBg->setBrush(c.inset);mark.uniBg->setPen(QPen(c.border));}
+    for(size_t i=0;i<mark.uniTexts.size();++i) {
+      const int index=i>0 ? metricIndexForKey(mark.entries[i-1].metricKey) : -1;
+      mark.uniTexts[i]->setBrush(index>=0 ? metricColor(kMetrics[index]) : c.text);
+    }
+  }
+  hideCrosshair();updateMonitorStatus();update();
+}
+
+void MonitorTab::syncFrameTimer()
+{
+  if (m_monitoringActive && !m_paused && isVisible())
+    m_frameTimer.start();
+  else
+    m_frameTimer.stop();
+}
+
+void MonitorTab::showEvent( QShowEvent *event )
+{
+  QWidget::showEvent(event);
+  syncFrameTimer();
+}
+
+void MonitorTab::hideEvent( QHideEvent *event )
+{
+  QWidget::hideEvent(event);
+  m_frameTimer.stop();
+}
+
+void MonitorTab::renderFrame()
+{
+  if (!m_monitoringActive || m_paused || !isVisible()) return;
+  updateAxes();
+  updateStickyMarkPositions();
+  if (m_cursorInPlot)
+    updateCrosshair(m_lastCrosshairPos,m_annotationsVisible);
 }
 
 void MonitorTab::setMonitoringActive( bool active )
 {
   if (m_monitoringActive == active) return;
   m_monitoringActive = active;
+  syncFrameTimer();
+  updateMonitorStatus();
   ++m_fetchGeneration;
   if ( active )
   {
@@ -253,7 +340,7 @@ void MonitorTab::setMonitoringActive( bool active )
     // daemon history horizon (which can be 30 minutes). This bounds the
     // initial render cost to m_windowSeconds worth of points.
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    m_lastTimestamp = now - static_cast< qint64 >( m_windowSeconds ) * 1000;
+    m_lastTimestamp = now - m_fetchTimer.interval() - static_cast< qint64 >( m_windowSeconds ) * 1000;
     fetchData();
     m_fetchTimer.start();
     m_unifiedChartView->setFocus();  // Immediate key events (crosshair Ctrl)
@@ -266,31 +353,57 @@ void MonitorTab::setMonitoringActive( bool active )
 
 // UI Setup
 
+void MonitorTab::updateMonitorStatus()
+{
+  if (!m_pauseLabel) return;
+  QString color = FluentTheme::colors().secondary.name();
+  QString text = "Idle";
+  if (!m_client->isConnected()) text = "Waiting for service";
+  else if (m_paused) { text = "Ⅱ Paused"; color = FluentTheme::colors().warning.name(); }
+  else if (m_monitoringActive) { text = "● Live · 2 s delay"; color = FluentTheme::colors().success.name(); }
+  m_pauseLabel->setText(text);
+  m_pauseLabel->setStyleSheet("QLabel { color: " + color + "; font-weight: bold; padding: 8px; }");
+}
+
 void MonitorTab::setupUI()
 {
-  auto *mainLayout = new QVBoxLayout( this );
+  auto *mainLayout = new QHBoxLayout( this );
+  mainLayout->setContentsMargins(0,0,0,0);mainLayout->setSpacing(16);
 
   setupControls();
 
-  // (1) Legend / series-toggle group box - full width at top
-  auto *legendBox = new QGroupBox();
+  // The control panel is secondary to the telemetry plots.
+  auto *legendBox = FluentTheme::createCard();
+  legendBox->setFixedWidth(205);
   auto *legendLayout = new QGridLayout( legendBox );
-  legendLayout->setContentsMargins( 4, 4, 4, 4 );
-  int col = 0, row = 0;
+  legendLayout->setContentsMargins(18,20,18,20);
+  legendLayout->setVerticalSpacing(12);
+  legendLayout->setHorizontalSpacing(12);
+  auto *panelTitle=new QLabel("Visible metrics");panelTitle->setObjectName("cardTitle");legendLayout->addWidget(panelTitle,0,0,1,2);
+  int col = 0, row = 1;
   for ( int i = 0; i < METRIC_COUNT; ++i )
   {
     const auto &md = kMetrics[ i ];
-    auto *cb = new QCheckBox( md.label );
+    if (i==0 || i==4) {
+      auto *group=new QLabel(i==0 ? "CPU" : "GPU");group->setObjectName("subheading");
+      legendLayout->setRowMinimumHeight(row,32);legendLayout->addWidget(group,row++,0,1,2);
+    }
+    QString controlLabel=QString::fromUtf8(md.label);
+    controlLabel.remove(QRegularExpression("^(CPU |dGPU )"));
+    controlLabel.replace("Temp","Temperature").replace("Fan Duty","Fan duty").replace("VRAM Freq","VRAM frequency").replace("Core Voltage","Core voltage");
+    auto *cb = new QCheckBox(controlLabel);cb->setToolTip(md.label);
     cb->setChecked( true );
-    cb->setStyleSheet( QStringLiteral( "QCheckBox { color: %1; }" ).arg( md.color.name() ) );
+    auto *swatch=new QFrame;swatch->setFixedSize(20,3);swatch->setProperty("metricIndex",i);
+    swatch->setStyleSheet("border: none; border-radius: 1px; background: " + metricColor(md).name() + ";");
+    legendLayout->addWidget(swatch,row,1);
 
     legendLayout->addWidget( cb, row, col );
-    if ( ++col >= 5 ) { col = 0; ++row; }
+    ++row;
 
     // Create series
     auto *series = new QLineSeries();
     series->setName( md.label );
-    QPen pen( md.color );
+    QPen pen( metricColor(md) );
     pen.setWidth( 1 );
     series->setPen( pen );
     series->setProperty( "_unit", QString::fromUtf8( metricGroupUnit( md.group ) ) );
@@ -298,28 +411,31 @@ void MonitorTab::setupUI()
 
     connect( cb, &QCheckBox::toggled, series, &QLineSeries::setVisible );
 
-    m_seriesMap[ md.key ] = { series, cb, md.label, md.color, {} };
+    m_seriesMap[ md.key ] = { series, cb, md.label, metricColor(md), {} };
   }
 
   m_unifiedCheckBox = new QCheckBox( "Unified Graph" );
   m_unifiedCheckBox->setChecked( false );
   connect( m_unifiedCheckBox, &QCheckBox::toggled, this, &MonitorTab::setUnifiedMode );
-  legendLayout->addWidget( m_unifiedCheckBox, row, col );
+  legendLayout->setRowMinimumHeight(row,44);
+  legendLayout->addWidget( m_unifiedCheckBox, row, col,1,2 );
 
-  if ( ++col >= 5 ) { col = 0; ++row; }
+  ++row;
   // Pause indicator (hidden by default, shown when spacebar pauses updates)
-  m_pauseLabel = new QLabel( "⏸ PAUSED" );
-  m_pauseLabel->setStyleSheet( "QLabel { color: #FF6B6B; font-weight: bold; padding: 0 8px; }" );
-  m_pauseLabel->hide();
-  legendLayout->addWidget( m_pauseLabel, row, col );
+  m_pauseLabel = new QLabel;
+  m_pauseLabel->setObjectName("monitorStatus");
+  updateMonitorStatus();
+  connect(m_client, &UccdClient::connectionStatusChanged, this, [this] { updateMonitorStatus(); });
+  legendLayout->addWidget( m_pauseLabel, row, col,1,2 );
 
-  mainLayout->addWidget( legendBox );
+  legendLayout->setRowStretch(row+1,1);
+  mainLayout->addWidget(legendBox);
 
   // Per-group page (4 charts filling available space)
   auto *chartsWidget = new QWidget();
   auto *chartsLayout = new QVBoxLayout( chartsWidget );
   chartsLayout->setContentsMargins( 0, 0, 0, 0 );
-  chartsLayout->setSpacing( 2 );
+  chartsLayout->setSpacing(12);
 
   setupTemperatureChart();
   setupDutyChart();
@@ -327,11 +443,39 @@ void MonitorTab::setupUI()
   setupFrequencyChart();
   setupVoltageChart();
 
-  chartsLayout->addWidget( m_tempChartView, 1 );
-  chartsLayout->addWidget( m_dutyChartView, 1 );
-  chartsLayout->addWidget( m_powerChartView, 1 );
-  chartsLayout->addWidget( m_freqChartView, 1 );
-  chartsLayout->addWidget( m_voltChartView, 1 );
+  auto addChartCard = [chartsLayout](QChartView *view, const QString &title) {
+    auto *card = FluentTheme::createCard();
+    auto *layout = new QVBoxLayout(card);
+    layout->setContentsMargins(12,10,12,8);
+    layout->setSpacing(0);
+    auto *header = new QHBoxLayout;
+    header->setSpacing(12);
+    auto *heading = new QLabel(title);
+    heading->setObjectName("cardTitle");
+    header->addWidget(heading);
+    header->addStretch();
+    for (auto *abstractSeries : view->chart()->series()) {
+      auto *series = qobject_cast<QLineSeries *>(abstractSeries);
+      if (!series) continue;
+      QString name = series->name().startsWith("CPU") ? "CPU" : "dGPU";
+      if (series->name().contains("VRAM")) name = "VRAM";
+      auto *label = new QLabel("━ " + name);
+      label->setToolTip(series->name());
+      label->setStyleSheet("font-size: 12px; color: " + series->color().name() + ";");
+      header->addWidget(label);
+      QObject::connect(series,&QXYSeries::colorChanged,label,[label](QColor color){label->setStyleSheet("font-size: 12px; color: "+color.name()+";");});
+      QObject::connect(series, &QAbstractSeries::visibleChanged, label,
+                       [series,label] { label->setVisible(series->isVisible()); });
+    }
+    layout->addLayout(header);
+    layout->addWidget(view,1);
+    chartsLayout->addWidget(card,1);
+  };
+  addChartCard(m_tempChartView, "Temperature · °C");
+  addChartCard(m_dutyChartView, "Fan duty · %");
+  addChartCard(m_powerChartView, "Power · W");
+  addChartCard(m_freqChartView, "Frequency · MHz");
+  addChartCard(m_voltChartView, "Core voltage · mV");
 
   // Wrap the per-group charts in a scroll area so the window can be
   // resized smaller than the combined minimum height of 4 charts.
@@ -427,11 +571,14 @@ void MonitorTab::setTimeWindow( int seconds )
           uni->clear();
     }
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    m_lastTimestamp = now - static_cast< qint64 >( m_windowSeconds ) * 1000;
+    m_lastTimestamp = now - m_fetchTimer.interval() - static_cast< qint64 >( m_windowSeconds ) * 1000;
     fetchData();
     updateAxes();
   }
 
+  // Preview never persists local preferences.
+
+  if (readOnlyPreview) return;
   // Persist only the time window value
   QSettings settings( QDir::homePath() + "/.config/uccrc", QSettings::IniFormat );
   settings.beginGroup( "MonitorTab" );
@@ -510,7 +657,7 @@ void MonitorTab::createUnifiedSeries()
     const auto &md = kMetrics[ i ];
     auto *ns = new QLineSeries();
     ns->setName( md.label );
-    QPen pen( md.color );
+    QPen pen( metricColor(md) );
     pen.setWidth( 1 );
     ns->setPen( pen );
 
@@ -618,10 +765,10 @@ void MonitorTab::installHoverCallout( QChart *chart )
   // chart's scene. Hidden by default; shown on hover.
   auto *bg   = new QGraphicsRectItem( chart );
   auto *text = new QGraphicsSimpleTextItem( chart );
-  bg->setBrush( QBrush( QColor( 30, 30, 30, 200 ) ) );
-  bg->setPen( QPen( QColor( 200, 200, 200 ) ) );
+  bg->setBrush( QBrush( FluentTheme::colors().inset ) );
+  bg->setPen( QPen( FluentTheme::colors().border ) );
   bg->setZValue( 100 );
-  text->setBrush( Qt::white );
+  text->setBrush( FluentTheme::colors().text );
   text->setZValue( 101 );
   bg->hide();
   text->hide();
@@ -724,7 +871,7 @@ MonitorTab::MarkGfx MonitorTab::createMarkGfx( QChart *chart, const QColor &bord
   auto *bg   = new ClickableRectItem( chart );
   auto *text = new QGraphicsSimpleTextItem( chart );
 
-  bg->setBrush( QBrush( QColor( 30, 30, 30, 220 ) ) );
+  bg->setBrush( QBrush( FluentTheme::colors().inset ) );
   bg->setPen( QPen( borderColor, 2 ) );
   bg->setZValue( 90 );
   if ( onClick )
@@ -732,7 +879,7 @@ MonitorTab::MarkGfx MonitorTab::createMarkGfx( QChart *chart, const QColor &bord
 
   // Let mouse clicks pass through the text to the bg rect behind it
   text->setAcceptedMouseButtons( Qt::NoButton );
-  text->setBrush( Qt::white );
+  text->setBrush( FluentTheme::colors().text );
   text->setZValue( 91 );
   bg->hide();
   text->hide();
@@ -860,7 +1007,7 @@ void MonitorTab::addStickyMarkGroup( qint64 ts, double clickDataY,
       continue;
     }
     const auto &md = kMetrics[ idx ];
-    mark.groupGfxList.push_back( createMarkGfx( chartForGroup( md.group ), md.color, removeCb ) );
+    mark.groupGfxList.push_back( createMarkGfx( chartForGroup( md.group ), metricColor(md), removeCb ) );
   }
 
   // Create unified chart graphics if the unified view is active
@@ -868,15 +1015,15 @@ void MonitorTab::addStickyMarkGroup( qint64 ts, double clickDataY,
   {
     // Background rect (clickable)
     auto *bg = new ClickableRectItem( m_unifiedChart );
-    bg->setBrush( QBrush( QColor( 30, 30, 30, 220 ) ) );
-    bg->setPen( QPen( QColor( 200, 200, 200 ), 1 ) );
+    bg->setBrush( QBrush( FluentTheme::colors().inset ) );
+    bg->setPen( QPen( FluentTheme::colors().border, 1 ) );
     bg->setZValue( 90 );
     bg->setClickCallback( removeCb );
     mark.uniBg = bg;
 
     // One text item per entry + timestamp header
     auto *tsText = new QGraphicsSimpleTextItem( m_unifiedChart );
-    tsText->setBrush( Qt::white );
+    tsText->setBrush( FluentTheme::colors().text );
     tsText->setZValue( 91 );
     tsText->setAcceptedMouseButtons( Qt::NoButton );
     mark.uniTexts.push_back( tsText );
@@ -884,7 +1031,7 @@ void MonitorTab::addStickyMarkGroup( qint64 ts, double clickDataY,
     for ( const auto &entry : entries )
     {
       const int idx = metricIndexForKey( entry.metricKey );
-      const QColor col = ( idx >= 0 ) ? kMetrics[ idx ].color : Qt::white;
+      const QColor col = ( idx >= 0 ) ? metricColor(kMetrics[ idx ]) : FluentTheme::colors().text;
       auto *txt = new QGraphicsSimpleTextItem( m_unifiedChart );
       txt->setBrush( col );
       txt->setZValue( 91 );
@@ -1107,15 +1254,15 @@ void MonitorTab::createUnifiedMarkGfx()
     };
 
     auto *bg = new ClickableRectItem( m_unifiedChart );
-    bg->setBrush( QBrush( QColor( 30, 30, 30, 220 ) ) );
-    bg->setPen( QPen( QColor( 200, 200, 200 ), 1 ) );
+    bg->setBrush( QBrush( FluentTheme::colors().inset ) );
+    bg->setPen( QPen( FluentTheme::colors().border, 1 ) );
     bg->setZValue( 90 );
     bg->setClickCallback( removeCb );
     mark.uniBg = bg;
 
     // Timestamp text
     auto *tsText = new QGraphicsSimpleTextItem( m_unifiedChart );
-    tsText->setBrush( Qt::white );
+    tsText->setBrush( FluentTheme::colors().text );
     tsText->setZValue( 91 );
     tsText->setAcceptedMouseButtons( Qt::NoButton );
     mark.uniTexts.push_back( tsText );
@@ -1124,7 +1271,7 @@ void MonitorTab::createUnifiedMarkGfx()
     for ( const auto &entry : mark.entries )
     {
       const int idx = metricIndexForKey( entry.metricKey );
-      const QColor col = ( idx >= 0 ) ? kMetrics[ idx ].color : Qt::white;
+      const QColor col = ( idx >= 0 ) ? metricColor(kMetrics[ idx ]) : FluentTheme::colors().text;
       auto *txt = new QGraphicsSimpleTextItem( m_unifiedChart );
       txt->setBrush( col );
       txt->setZValue( 91 );
@@ -1373,10 +1520,10 @@ void MonitorTab::updateCrosshair( const QPointF &widgetPos, bool ctrlHeld )
     auto *bg   = new QGraphicsRectItem( m_unifiedChart );
     auto *text = new QGraphicsSimpleTextItem( m_unifiedChart );
 
-    bg->setBrush( QBrush( QColor( 30, 30, 30, 220 ) ) );
-    bg->setPen( QPen( md.color, 1 ) );
+    bg->setBrush( QBrush( FluentTheme::colors().inset ) );
+    bg->setPen( QPen( metricColor(md), 1 ) );
     bg->setZValue( 95 );
-    text->setBrush( md.color );
+    text->setBrush( metricColor(md) );
     text->setZValue( 96 );
     text->setAcceptedMouseButtons( Qt::NoButton );
 
@@ -1415,10 +1562,10 @@ void MonitorTab::updateCrosshair( const QPointF &widgetPos, bool ctrlHeld )
     auto *bg   = new QGraphicsRectItem( m_unifiedChart );
     auto *text = new QGraphicsSimpleTextItem( m_unifiedChart );
 
-    bg->setBrush( QBrush( QColor( 30, 30, 30, 220 ) ) );
-    bg->setPen( QPen( QColor( 150, 150, 150 ), 1 ) );
+    bg->setBrush( QBrush( FluentTheme::colors().inset ) );
+    bg->setPen( QPen( FluentTheme::colors().border, 1 ) );
     bg->setZValue( 95 );
-    text->setBrush( Qt::white );
+    text->setBrush( FluentTheme::colors().text );
     text->setZValue( 96 );
     text->setAcceptedMouseButtons( Qt::NoButton );
 
@@ -1551,8 +1698,8 @@ void MonitorTab::applyZoomRect( const QRect &viewportRect )
 
   // Pause data fetching
   m_paused = true;
-  if ( m_pauseLabel )
-    m_pauseLabel->setVisible( true );
+  syncFrameTimer();
+  updateMonitorStatus();
 
   // Apply zoomed ranges
   m_unifiedXAxis->setRange(
@@ -1619,7 +1766,7 @@ void MonitorTab::setupPowerChart()
 {
   m_powerChart = createChart();
   m_powerXAxis = createXAxis();
-  m_powerYAxis = createYAxis( QStringLiteral( "Power (W)" ), 0, m_maxPowerW );
+  m_powerYAxis = createYAxis( QStringLiteral( "Power (W)" ), 0, 250 );
   m_powerChart->addAxis( m_powerXAxis, Qt::AlignBottom );
   m_powerChart->addAxis( m_powerYAxis, Qt::AlignLeft );
 
@@ -1719,12 +1866,10 @@ void MonitorTab::keyPressEvent( QKeyEvent *event )
   if ( event->key() == Qt::Key_Space )
   {
     m_paused = !m_paused;
+    syncFrameTimer();
     if ( !m_paused && m_zoomed )
       resetZoom();
-    if ( m_pauseLabel )
-    {
-      m_pauseLabel->setVisible( m_paused );
-    }
+    updateMonitorStatus();
     event->accept();
     return;
   }
@@ -1792,7 +1937,7 @@ void MonitorTab::applyBinaryData( const QByteArray &data )
 void MonitorTab::trimSeries()
 {
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
-  const qreal cutoff = static_cast< qreal >( now - static_cast< qint64 >( m_windowSeconds ) * 1000 );
+  const qreal cutoff = static_cast< qreal >( now - m_fetchTimer.interval() - static_cast< qint64 >( m_windowSeconds ) * 1000 );
 
   // Trim leading stale points from in-memory buffers only.
   // The QLineSeries objects are updated in commitSeries().
@@ -1802,8 +1947,9 @@ void MonitorTab::trimSeries()
     int stale = 0;
     while ( stale < buf.size() && buf[ stale ].x() < cutoff )
       ++stale;
-    if ( stale > 0 )
-      buf.remove( 0, stale );
+    // Keep one predecessor so the line reaches the left viewport edge.
+    if ( stale > 1 )
+      buf.remove( 0, stale - 1 );
   }
 }
 
@@ -1838,7 +1984,9 @@ void MonitorTab::commitSeries()
 
 void MonitorTab::updateAxes()
 {
-  const QDateTime now = QDateTime::currentDateTime();
+  if (!m_paused || !m_presentationTimestamp)
+    m_presentationTimestamp = QDateTime::currentMSecsSinceEpoch() - m_fetchTimer.interval();
+  const QDateTime now = QDateTime::fromMSecsSinceEpoch(m_presentationTimestamp);
   const QDateTime start = now.addSecs( -m_windowSeconds );
 
   // Only update axes for the currently visible chart view - the invisible
@@ -1847,14 +1995,14 @@ void MonitorTab::updateAxes()
 
   if ( perGroup )
   {
-    auto setRange = [&]( QDateTimeAxis *axis ) {
-      if ( axis ) axis->setRange( start, now );
+    auto setRange = [&]( QDateTimeAxis *axis, QChartView *view ) {
+      if ( axis && view->isVisible() ) axis->setRange( start, now );
     };
-    setRange( m_tempXAxis );
-    setRange( m_dutyXAxis );
-    setRange( m_powerXAxis );
-    setRange( m_freqXAxis );
-    setRange( m_voltXAxis );
+    setRange( m_tempXAxis, m_tempChartView );
+    setRange( m_dutyXAxis, m_dutyChartView );
+    setRange( m_powerXAxis, m_powerChartView );
+    setRange( m_freqXAxis, m_freqChartView );
+    setRange( m_voltXAxis, m_voltChartView );
   }
   else
   {
@@ -1891,12 +2039,14 @@ void MonitorTab::updateGroupChartVisibility()
         }
       }
     }
-    view->setVisible( anyEnabled );
+    view->parentWidget()->setVisible( anyEnabled );
   }
 }
 
 void MonitorTab::saveCheckboxStates()
 {
+  if (readOnlyPreview) return;
+
   QSettings settings( QDir::homePath() + "/.config/uccrc", QSettings::IniFormat );
   settings.beginGroup( "MonitorTab" );
 

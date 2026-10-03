@@ -200,6 +200,7 @@ public:
   // Water cooler control
   bool enableWaterCooler( bool enable );
   std::optional< bool > isWaterCoolerEnabled();
+  bool setWaterCoolerAutoControl( bool enabled );
   bool setWaterCoolerFanSpeed( int dutyCyclePercent );
   bool setWaterCoolerPumpVoltage( int voltageCode );   // PumpVoltage enum cast to int
   bool setWaterCoolerLEDColor( int r, int g, int b, int mode );  // RGBState enum cast to int

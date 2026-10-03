@@ -1,3 +1,5 @@
+#include "FluentTheme.hpp"
+#include "FluentToggle.hpp"
 /*
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,30 +44,18 @@ HardwareTab::HardwareTab( SystemMonitor *systemMonitor, QWidget *parent )
 void HardwareTab::setupUI( QWidget *parent )
 {
   // Quick Controls Group
-  QGroupBox *quickControlsGroup = new QGroupBox( "General Quick Controls" );
-  QHBoxLayout *controlsLayout = new QHBoxLayout( quickControlsGroup );
-  m_webcamCheckBox = new QCheckBox( "Webcam Enabled" );
-  m_fnLockCheckBox = new QCheckBox( "Fn Lock Enabled" );
-  m_webcamCheckBox->setLayoutDirection( Qt::RightToLeft );
-  m_fnLockCheckBox->setLayoutDirection( Qt::RightToLeft );
-  controlsLayout->addWidget( m_webcamCheckBox );
-  controlsLayout->addWidget( m_fnLockCheckBox );
-  QLabel *brightnessLabel = new QLabel( "Display Brightness:" );
-  m_displayBrightnessSlider = new QSlider( Qt::Horizontal );
-  m_displayBrightnessSlider->setMinimum( 0 );
-  m_displayBrightnessSlider->setMaximum( 100 );
-  m_displayBrightnessSlider->setValue( 50 );
-  m_displayBrightnessValueLabel = new QLabel( "50%" );
-  m_displayBrightnessValueLabel->setMinimumWidth( 40 );
-  controlsLayout->addWidget( brightnessLabel );
-  controlsLayout->addWidget( m_displayBrightnessSlider );
-  controlsLayout->addWidget( m_displayBrightnessValueLabel );
+  auto *quickControlsGroup=FluentTheme::createCard();
+  auto *controlsLayout=new QVBoxLayout(quickControlsGroup);controlsLayout->setContentsMargins(24,18,24,18);controlsLayout->setSpacing(12);
+  auto *heading=new QLabel("Hardware controls");heading->setObjectName("cardTitle");controlsLayout->addWidget(heading);
+  m_webcamCheckBox=new FluentToggle("Webcam");m_fnLockCheckBox=new FluentToggle("Fn Lock");
+  controlsLayout->addWidget(m_webcamCheckBox);controlsLayout->addWidget(m_fnLockCheckBox);
+  auto *brightness=new QHBoxLayout;brightness->setSpacing(24);
+  auto *brightnessLabel=new QLabel("Display brightness");brightnessLabel->setMinimumWidth(140);brightness->addWidget(brightnessLabel);
+  m_displayBrightnessSlider=new QSlider(Qt::Horizontal);m_displayBrightnessSlider->setRange(0,100);m_displayBrightnessSlider->setValue(50);
+  m_displayBrightnessValueLabel=new QLabel("—");m_displayBrightnessValueLabel->setMinimumWidth(40);
+  brightness->addWidget(m_displayBrightnessSlider,1);brightness->addWidget(m_displayBrightnessValueLabel);FluentTheme::styleSliderRow(brightness,m_displayBrightnessValueLabel);controlsLayout->addLayout(brightness);
+  if(auto *parentLayout=qobject_cast<QVBoxLayout*>(parent->layout())) parentLayout->addWidget(quickControlsGroup);
 
-  auto *parentLayout = qobject_cast< QVBoxLayout * >( parent->layout() );
-  if ( parentLayout )
-  {
-    parentLayout->addWidget( quickControlsGroup );
-  }
 }
 
 void HardwareTab::connectSignals()

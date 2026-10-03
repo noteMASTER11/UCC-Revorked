@@ -1,3 +1,4 @@
+#include "PreviewMode.hpp"
 /*
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -101,8 +102,14 @@ void UccdClient::connectToDaemon()
 
   // The service is running - safe to introspect without triggering activation.
   // Do NOT pass a parent to QDBusInterface - unique_ptr owns its lifetime.
+  QString destination = QLatin1String(DBUS_SERVICE);
+  if (readOnlyPreview) {
+    destination = QDBusConnection::systemBus().interface()->serviceOwner(destination).value();
+    if (destination.isEmpty()) { m_connected = false; m_interface.reset(); return; }
+  }
+  // A unique owner cannot activate a replacement daemon during a preview read.
   m_interface = std::make_unique< QDBusInterface >(
-    DBUS_SERVICE,
+    destination,
     DBUS_PATH,
     DBUS_INTERFACE,
     QDBusConnection::systemBus() );
@@ -160,7 +167,7 @@ void UccdClient::onPowerStateChangedSignal( const QString &state )
 template< typename T >
 std::optional< T > UccdClient::callMethod( const QString &method ) const
 {
-  if ( !isConnected() )
+  if ( !mayDispatchUccdMethod(method) || !isConnected() )
   {
     return std::nullopt;
   }
@@ -180,7 +187,7 @@ std::optional< T > UccdClient::callMethod( const QString &method ) const
 template< typename T, typename... Args >
 std::optional< T > UccdClient::callMethod( const QString &method, const Args &...args ) const
 {
-  if ( !isConnected() )
+  if ( !mayDispatchUccdMethod(method) || !isConnected() )
   {
     return std::nullopt;
   }
@@ -199,7 +206,7 @@ std::optional< T > UccdClient::callMethod( const QString &method, const Args &..
 
 bool UccdClient::callVoidMethod( const QString &method ) const
 {
-  if ( !isConnected() )
+  if ( !mayDispatchUccdMethod(method) || !isConnected() )
   {
     return false;
   }
@@ -216,7 +223,7 @@ bool UccdClient::callVoidMethod( const QString &method ) const
 template< typename... Args >
 bool UccdClient::callVoidMethod( const QString &method, const Args &...args ) const
 {
-  if ( !isConnected() )
+  if ( !mayDispatchUccdMethod(method) || !isConnected() )
   {
     return false;
   }
@@ -1155,6 +1162,11 @@ std::optional< int > UccdClient::getGpuFanSpeedPercent()
 }
 
 // Water cooler control
+bool UccdClient::setWaterCoolerAutoControl( bool enabled )
+{
+  return callMethod< bool, bool >( "SetWaterCoolerAutoControl", enabled ).value_or( false );
+}
+
 bool UccdClient::setWaterCoolerFanSpeed( int dutyCyclePercent )
 {
   return callMethod< bool, int >( "SetWaterCoolerFanSpeed", dutyCyclePercent ).value_or( false );

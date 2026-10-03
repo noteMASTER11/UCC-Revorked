@@ -88,6 +88,7 @@ option( BUILD_CLI "Build the command-line interface" ON )
 option( BUILD_TRAY "Build the system tray applet" ON )
 option( BUILD_GNOME "Install the GNOME Shell extension" ON )
 option( BUILD_TESTS "Build the unit test suite" OFF )
+option( UCC_READ_ONLY_PREVIEW "Block hardware/settings writes in prototype clients" OFF )
 
 if( BUILD_TRAY )
   find_package( ECM REQUIRED NO_MODULE )
@@ -111,6 +112,12 @@ include_directories( ${CMAKE_SOURCE_DIR}/include ${CMAKE_BINARY_DIR}/include )
 
 # Subdirectories
 add_subdirectory( uccd )
+# Optional native backdrop blur on X11 compositors that implement the blur protocol.
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+  pkg_check_modules(UCC_XCB QUIET IMPORTED_TARGET GLOBAL xcb)
+endif()
+
 add_subdirectory( libucc-dbus )
 
 if( BUILD_GUI )

@@ -126,7 +126,7 @@ void FanCurveEditorWidget::paintEvent(QPaintEvent*) {
         p.setFont(titleFont);
         p.setPen(labelColor);
         QRectF titleRect(left, 2, width() - left - right, top - 4);
-        p.drawText(titleRect, Qt::AlignCenter, m_title);
+        p.drawText(titleRect, Qt::AlignLeft | Qt::AlignVCenter, m_title);
     }
 
     QRectF plotRect(left, top, width() - left - right, height() - top - bottom);
@@ -259,7 +259,9 @@ void FanCurveEditorWidget::paintEvent(QPaintEvent*) {
         // Duty label (left of Y axis at crosshair Y)
         QString dutyLabel = QString::number(m_crosshairDuty, 'f', 0) + "%";
         QRectF dutyLabelRect(plotRect.left() - 40, cp.y() - 7, 38, 14);
-        p.fillRect(dutyLabelRect, bgColor);
+        // Clear the entire tick-label area before showing the live value.
+        // At 100% a narrow mask otherwise leaves the first digit of the tick.
+        p.fillRect(QRectF(0, cp.y() - 12, left - 2, 24), bgColor);
         p.drawText(dutyLabelRect, Qt::AlignRight | Qt::AlignVCenter, dutyLabel);
     }
 

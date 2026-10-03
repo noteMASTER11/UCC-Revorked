@@ -45,6 +45,8 @@ ucc_add_test( test_metrics_history  test_metrics_history.cpp )
 ucc_add_test( test_aquaris_selection test_aquaris_selection.cpp )
 target_compile_options(test_aquaris_selection PRIVATE -UNDEBUG)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME test_control_authorization COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_control_authorization.py)
+add_test(NAME test_watercooler_override COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_watercooler_override.py)
 add_test(NAME test_device_identification COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_device_identification.py)
 add_test(NAME test_bluetooth_retry COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_bluetooth_retry.py)
 add_test(NAME test_bluetooth_startup COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_bluetooth_startup.py)
@@ -61,6 +63,7 @@ if(NODE_EXECUTABLE)
 endif()
 if(DBUS_RUN_SESSION_EXECUTABLE AND BUILD_GUI)
   find_package(Qt6 REQUIRED COMPONENTS Widgets Charts Bluetooth)
+  set(CMAKE_AUTORCC ON)
   add_executable(test_gui_audit test_gui_audit.cpp
     ../ucc-gui/src/FanControlTab.cpp ../ucc-gui/inc/FanControlTab.hpp
     ../ucc-gui/src/FanCurveEditorWidget.cpp ../ucc-gui/inc/FanCurveEditorWidget.hpp
@@ -69,11 +72,28 @@ if(DBUS_RUN_SESSION_EXECUTABLE AND BUILD_GUI)
     ../ucc-gui/src/SystemMonitor.cpp ../ucc-gui/inc/SystemMonitor.hpp
     ../ucc-gui/src/DashboardTab.cpp ../ucc-gui/inc/DashboardTab.hpp
     ../ucc-gui/src/MonitorTab.cpp ../ucc-gui/inc/MonitorTab.hpp)
+  target_sources(test_gui_audit PRIVATE
+    ../ucc-gui/resources/fluent.qrc
+    ../ucc-gui/src/FluentEntrance.cpp
+    ../ucc-gui/src/FluentSidebar.cpp
+    ../ucc-gui/src/FluentTheme.cpp ../ucc-gui/inc/FluentTheme.hpp
+    ../ucc-gui/src/MainWindow.cpp ../ucc-gui/inc/MainWindow.hpp
+    ../ucc-gui/src/KeyboardTab.cpp
+    ../ucc-gui/src/KeyboardVisualizerWidget.cpp ../ucc-gui/inc/KeyboardVisualizerWidget.hpp
+    ../ucc-gui/src/HardwareTab.cpp ../ucc-gui/inc/HardwareTab.hpp
+    ../ucc-gui/src/AssignKeyZones.cpp ../ucc-gui/src/DetectLayout.cpp)
   target_include_directories(test_gui_audit PRIVATE ../ucc-gui/inc ../include)
   target_link_libraries(test_gui_audit PRIVATE ucc-dbus Qt6::Widgets Qt6::Charts Qt6::Bluetooth Qt6::Test)
+  if(TARGET PkgConfig::UCC_XCB)
+    target_link_libraries(test_gui_audit PRIVATE PkgConfig::UCC_XCB)
+    target_compile_definitions(test_gui_audit PRIVATE UCC_HAS_X11_BLUR)
+  endif()
   add_test(NAME test_gui_audit COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- bash ${CMAKE_CURRENT_SOURCE_DIR}/run_gui_audit_test.sh $<TARGET_FILE:test_gui_audit>)
   add_executable(test_gui_instance test_gui_instance.cpp
     ../ucc-gui/src/GuiInstance.cpp ../ucc-gui/inc/GuiInstance.hpp)
+  if(UCC_READ_ONLY_PREVIEW)
+    target_compile_definitions(test_gui_instance PRIVATE UCC_READ_ONLY_PREVIEW)
+  endif()
   target_include_directories(test_gui_instance PRIVATE ../ucc-gui/inc)
   target_link_libraries(test_gui_instance PRIVATE Qt6::Widgets Qt6::DBus Qt6::Test)
   add_test(NAME test_gui_instance COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:test_gui_instance>)

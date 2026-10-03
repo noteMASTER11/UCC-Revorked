@@ -20,6 +20,8 @@
 #include <QTimer>
 #include <cstdlib>
 #include "MainWindow.hpp"
+#include "PreviewMode.hpp"
+#include "FluentTheme.hpp"
 #include "GuiInstance.hpp"
 #include "SystemMonitor.hpp"
 #include "UccdClient.hpp"
@@ -76,6 +78,7 @@ int main( int argc, char *argv[] )
   }
 
   QApplication app( argc, argv );
+  ucc::FluentTheme::apply(app);
   app.setDesktopFileName("ucc-gui");
   app.setOrganizationName( "UniwillControlCenter" );
   app.setOrganizationDomain( "uniwill.local" );
@@ -93,7 +96,7 @@ int main( int argc, char *argv[] )
   {
     ucc::UccdClient client;
     auto supported = client.isDeviceSupported();
-    if ( !supported.has_value() || !supported.value() )
+    if ( !ucc::readOnlyPreview && ( !supported.has_value() || !supported.value() ) )
     {
       QMessageBox::critical(
         nullptr, "Unsupported Device",

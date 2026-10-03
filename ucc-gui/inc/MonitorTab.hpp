@@ -79,6 +79,8 @@ public:
   void setMonitoringActive( bool active );
 
 protected:
+  void showEvent( QShowEvent *event ) override;
+  void hideEvent( QHideEvent *event ) override;
   void keyPressEvent( QKeyEvent *event ) override;
   void wheelEvent( QWheelEvent *event ) override;
   bool eventFilter( QObject *watched, QEvent *event ) override;
@@ -89,6 +91,8 @@ private slots:
 private:
   // Setup helpers
   void setupUI();
+  void refreshTheme();
+  void updateMonitorStatus();
   void setupTemperatureChart();
   void setupDutyChart();
   void setupPowerChart();
@@ -141,6 +145,8 @@ private:
 
   /** Update the X-axis range to [now - window, now]. */
   void updateAxes();
+  void syncFrameTimer();
+  void renderFrame();
 
   // Data model
   struct SeriesInfo
@@ -277,6 +283,8 @@ private:
   // State
   UccdClient *m_client = nullptr;
   QTimer      m_fetchTimer;
+  QTimer      m_frameTimer;
+  qint64      m_presentationTimestamp = 0;
   bool        m_monitoringActive = false;
   bool        m_fetchPending = false;
   unsigned    m_fetchGeneration = 0;

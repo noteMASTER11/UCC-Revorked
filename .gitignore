@@ -23,3 +23,9 @@ verify-build.sh
 /contrib/mechrevo/arch/drivers/tuxedo-drivers/
 *.pkg.tar.*
 __pycache__/
+
+/build-preview/
+
+# Local release packages and implementation session notes
+/artifacts/
+/.superpowers/

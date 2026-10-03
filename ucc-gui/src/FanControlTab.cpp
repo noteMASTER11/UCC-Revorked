@@ -1,3 +1,6 @@
+#include "PreviewMode.hpp"
+#include "FluentToggle.hpp"
+#include "FluentTheme.hpp"
 /*
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,6 +19,7 @@
 #include "FanControlTab.hpp"
 
 #include <QFrame>
+#include <QTabBar>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLineEdit>
@@ -24,6 +28,7 @@
 #include <QMainWindow>
 #include <QStatusBar>
 #include <QDBusReply>
+#include <QDBusConnectionInterface>
 #include <QDebug>
 #include "CommonTypes.hpp"
 #include "AsyncRead.hpp"
@@ -44,8 +49,13 @@ FanControlTab::FanControlTab( UccdClient *client,
   // DBus interface for water cooler hardware controls (only if water cooler supported)
   if ( m_waterCoolerSupported )
   {
-    m_waterCoolerDbus = new QDBusInterface(
-      QStringLiteral( "com.uniwill.uccd" ),
+    QString destination = QStringLiteral("com.uniwill.uccd");
+    if (readOnlyPreview) {
+      auto *bus = QDBusConnection::systemBus().interface();
+      destination = bus ? bus->serviceOwner(destination).value() : QString();
+    }
+    if (!destination.isEmpty()) m_waterCoolerDbus = new QDBusInterface(
+      destination,
       QStringLiteral( "/com/uniwill/uccd" ),
       QStringLiteral( "com.uniwill.uccd" ),
       QDBusConnection::systemBus(), this );
@@ -57,6 +67,11 @@ FanControlTab::FanControlTab( UccdClient *client,
 
   setupUI();
   connectSignals();
+}
+
+FanControlTab::~FanControlTab() {
+  // Child controls can emit while QWidget tears them down, after our vtable is gone.
+  for(auto *child:findChildren<QObject*>()) QObject::disconnect(child,nullptr,this,nullptr);
 }
 
 void FanControlTab::pollWaterCoolerStatus()
@@ -92,7 +107,7 @@ void FanControlTab::setupUI()
 {
   QVBoxLayout *mainLayout = new QVBoxLayout( this );
   mainLayout->setContentsMargins( 0, 0, 0, 0 );
-  mainLayout->setSpacing( 0 );
+  mainLayout->setSpacing(16);
 
   // Top bar: fan profile selection
   QHBoxLayout *selectLayout = new QHBoxLayout();
@@ -123,15 +138,16 @@ void FanControlTab::setupUI()
   m_applyFanProfilesButton->setEnabled( false );
 
   m_saveFanProfilesButton = new QPushButton( "Save" );
+  m_saveFanProfilesButton->setProperty("primary",true);
   m_saveFanProfilesButton->setMaximumWidth( 80 );
   m_saveFanProfilesButton->setEnabled( false );
 
   m_copyFanProfileButton = new QPushButton( "Copy" );
-  m_copyFanProfileButton->setMaximumWidth( 60 );
+  m_copyFanProfileButton->setMinimumWidth( 80 );
   m_copyFanProfileButton->setEnabled( false );
 
   m_removeFanProfileButton = new QPushButton( "Remove" );
-  m_removeFanProfileButton->setMaximumWidth( 70 );
+  m_removeFanProfileButton->setMinimumWidth( 90 );
 
   selectLayout->addWidget( m_fanProfileCombo, 1 );
   selectLayout->addWidget( m_applyFanProfilesButton );
@@ -140,12 +156,10 @@ void FanControlTab::setupUI()
   selectLayout->addWidget( m_removeFanProfileButton );
   mainLayout->addLayout( selectLayout );
 
-  QFrame *separator = new QFrame();
-  separator->setFrameShape( QFrame::HLine );
-  mainLayout->addWidget( separator );
-
   // Sub-tabs
   QTabWidget *subTabs = new QTabWidget();
+  subTabs->setObjectName("coolingPages");
+  subTabs->tabBar()->hide();
   subTabs->setStyleSheet(
     "QTabWidget::pane { border: none; }"
     "QTabBar::tab { padding: 6px 18px; }" );
@@ -156,22 +170,22 @@ void FanControlTab::setupUI()
     QScrollArea *scroll = new QScrollArea();
     scroll->setWidgetResizable( true );
     QVBoxLayout *layout = new QVBoxLayout( systemWidget );
-    layout->setContentsMargins( 10, 10, 10, 10 );
-    layout->setSpacing( 8 );
+    layout->setContentsMargins(0,0,0,0);
+    layout->setSpacing(16);
 
     QVBoxLayout *cpuLayout = new QVBoxLayout();
     cpuLayout->setSpacing( 0 );
     m_cpuFanCurveEditor = new FanCurveEditorWidget();
     m_cpuFanCurveEditor->setTitle( tr( "CPU Fan Curve" ) );
-    cpuLayout->addWidget( m_cpuFanCurveEditor );
-    layout->addLayout( cpuLayout );
+    auto *cpuCard=FluentTheme::createCard();cpuCard->setLayout(cpuLayout);cpuLayout->setContentsMargins(12,12,12,12);cpuLayout->addWidget(m_cpuFanCurveEditor);
+    layout->addWidget(cpuCard);
 
     QVBoxLayout *gpuLayout = new QVBoxLayout();
     gpuLayout->setSpacing( 0 );
     m_gpuFanCurveEditor = new FanCurveEditorWidget();
     m_gpuFanCurveEditor->setTitle( tr( "GPU Fan Curve" ) );
-    gpuLayout->addWidget( m_gpuFanCurveEditor );
-    layout->addLayout( gpuLayout );
+    auto *gpuCard=FluentTheme::createCard();gpuCard->setLayout(gpuLayout);gpuLayout->setContentsMargins(12,12,12,12);gpuLayout->addWidget(m_gpuFanCurveEditor);
+    layout->addWidget(gpuCard);
 
     scroll->setWidget( systemWidget );
     subTabs->addTab( scroll, "System (CPU / GPU)" );
@@ -184,28 +198,19 @@ void FanControlTab::setupUI()
     QScrollArea *scroll = new QScrollArea();
     scroll->setWidgetResizable( true );
     QVBoxLayout *layout = new QVBoxLayout( wcWidget );
-    layout->setContentsMargins( 5, 5, 5, 5 );
-    layout->setSpacing( 8 );
+    layout->setContentsMargins(0,0,0,0);
+    layout->setSpacing(16);
 
     // Water cooler hardware controls
     QHBoxLayout *wcHw = new QHBoxLayout();
     wcHw->setContentsMargins( 0, 0, 0, 0 );
     wcHw->setSpacing( 4 );
 
-    m_waterCoolerEnableCheckBox = new QPushButton( "Enable" );
-    m_waterCoolerEnableCheckBox->setCheckable( true );
+    m_waterCoolerEnableCheckBox = new FluentToggle( "" );
+    m_waterCoolerEnableCheckBox->setFixedWidth(46);
+    m_waterCoolerEnableCheckBox->setAccessibleName("Water cooler enabled");
     m_waterCoolerEnableCheckBox->setChecked( ucc::WATER_COOLER_INITIAL_STATE );
     m_waterCoolerEnableCheckBox->setToolTip( tr( "When enabled the daemon will scan for water cooler devices" ) );
-    m_waterCoolerEnableCheckBox->setFixedHeight( 24 );
-    m_waterCoolerEnableCheckBox->setStyleSheet([
-      ]() {
-        // Use green/red for enabled/disabled states instead of theme highlight
-        const QString enabledColor = QStringLiteral("#4caf50");
-        const QString disabledColor = QStringLiteral("#d32f2f");
-        return QStringLiteral("QPushButton { font-size: 11px; padding: 2px 12px; border: 1px solid palette(mid); border-radius: 4px; background-color: %1; }"
-                              "QPushButton:checked { background-color: %2; font-weight: bold; }")
-               .arg(disabledColor, enabledColor);
-      }() );
     wcHw->addWidget( m_waterCoolerEnableCheckBox );
 
     QLabel *pumpVoltageLabel = new QLabel( "Pump Voltage:" );
@@ -259,9 +264,19 @@ void FanControlTab::setupUI()
     // Set initial color button state
     updateColorButtonState();
 
-    QWidget *waterCoolerWidget = new QWidget();
-    waterCoolerWidget->setLayout( wcHw );
-    layout->addWidget( waterCoolerWidget );
+    // Reflow the existing controls without changing signals or parameter values.
+    while (wcHw->count()) delete wcHw->takeAt(0);
+    delete wcHw;
+    auto *waterCoolerWidget=FluentTheme::createCard();
+    auto *controls=new QGridLayout(waterCoolerWidget);controls->setContentsMargins(24,24,24,24);controls->setHorizontalSpacing(24);controls->setVerticalSpacing(16);
+    auto *heading=new QLabel("Cooling controls");heading->setObjectName("cardTitle");controls->addWidget(heading,0,0,1,4);
+    controls->addWidget(new QLabel("Water cooler"),1,0);controls->addWidget(m_waterCoolerEnableCheckBox,1,1,Qt::AlignLeft);
+    controls->addWidget(fanSpeedLabel,1,2);controls->addWidget(m_fanSpeedSlider,1,3);
+    controls->addWidget(pumpVoltageLabel,2,0);controls->addWidget(m_pumpVoltageCombo,2,1,Qt::AlignLeft);
+    controls->addWidget(m_ledOnOffCheckBox,2,2);
+    auto *lighting=new QHBoxLayout;lighting->setSpacing(12);lighting->addWidget(ledModeLabel);lighting->addWidget(m_ledModeCombo);lighting->addWidget(m_colorPickerButton);
+    controls->addLayout(lighting,2,3);controls->setColumnStretch(3,1);
+    layout->addWidget(waterCoolerWidget);
 
     // Water cooler fan curve editor
     QVBoxLayout *wcFanLayout = new QVBoxLayout();
@@ -269,7 +284,7 @@ void FanControlTab::setupUI()
     m_waterCoolerFanCurveEditor = new FanCurveEditorWidget();
     m_waterCoolerFanCurveEditor->setTitle( tr( "Water Cooler Fan Curve" ) );
     wcFanLayout->addWidget( m_waterCoolerFanCurveEditor );
-    layout->addLayout( wcFanLayout );
+    auto *wcFanCard=FluentTheme::createCard();wcFanCard->setLayout(wcFanLayout);wcFanLayout->setContentsMargins(12,12,12,12);layout->addWidget(wcFanCard);
 
     // Pump voltage curve editor
     QVBoxLayout *pumpLayout = new QVBoxLayout();
@@ -277,7 +292,7 @@ void FanControlTab::setupUI()
     m_pumpCurveEditor = new PumpCurveEditorWidget();
     m_pumpCurveEditor->setTitle( tr( "Pump Voltage Curve" ) );
     pumpLayout->addWidget( m_pumpCurveEditor );
-    layout->addLayout( pumpLayout );
+    auto *pumpCard=FluentTheme::createCard();pumpCard->setLayout(pumpLayout);pumpLayout->setContentsMargins(12,12,12,12);layout->addWidget(pumpCard);
 
     scroll->setWidget( wcWidget );
     subTabs->addTab( scroll, "Water Cooler" );
@@ -328,7 +343,7 @@ void FanControlTab::connectSignals()
   // Water cooler hardware controls
   if ( m_waterCoolerSupported )
   {
-    connect( m_waterCoolerEnableCheckBox, &QPushButton::toggled,
+    connect( m_waterCoolerEnableCheckBox, &QCheckBox::toggled,
              this, &FanControlTab::onWaterCoolerEnableToggled );
     connect( m_pumpVoltageCombo, QOverload< int >::of( &QComboBox::currentIndexChanged ),
              this, &FanControlTab::onPumpVoltageChanged );
@@ -469,6 +484,7 @@ void FanControlTab::setWaterCoolerEnabled( bool enabled )
 
 void FanControlTab::sendWaterCoolerEnable( bool enabled )
 {
+  if (readOnlyPreview) return;
   if ( m_waterCoolerDbus )
     m_waterCoolerDbus->call( QStringLiteral( "EnableWaterCooler" ), enabled );
 }
@@ -482,6 +498,7 @@ bool FanControlTab::isWaterCoolerEnabled() const
 
 void FanControlTab::onWaterCoolerEnableToggled( bool enabled )
 {
+  if (readOnlyPreview) return;
   if ( m_waterCoolerDbus )
     m_waterCoolerDbus->call( QStringLiteral( "EnableWaterCooler" ), enabled );
 
@@ -534,6 +551,7 @@ void FanControlTab::onDisconnected()
 
 void FanControlTab::onPumpVoltageChanged( int index )
 {
+  if (readOnlyPreview) return;
   if ( !m_waterCoolerDbus ) return;
   if ( index == static_cast< int >( PumpVoltage::Off ) )
     m_waterCoolerDbus->call( QStringLiteral( "TurnOffWaterCoolerPump" ) );
@@ -546,12 +564,14 @@ void FanControlTab::onPumpVoltageChanged( int index )
 
 void FanControlTab::onFanSpeedChanged( int speed )
 {
+  if (readOnlyPreview) return;
   if ( !m_waterCoolerDbus ) return;
   m_waterCoolerDbus->call( QStringLiteral( "SetWaterCoolerFanSpeed" ), speed );
 }
 
 void FanControlTab::onLEDOnOffChanged( bool enabled )
 {
+  if (readOnlyPreview) return;
   if ( !m_waterCoolerDbus ) return;
   updateColorButtonState();
   if ( enabled )
@@ -566,6 +586,7 @@ void FanControlTab::onLEDOnOffChanged( bool enabled )
 
 void FanControlTab::onLEDModeChanged( int /*index*/ )
 {
+  if (readOnlyPreview) return;
   updateColorButtonState();
   if ( !m_waterCoolerDbus ) return;
   if ( m_ledOnOffCheckBox->isChecked() )
@@ -578,8 +599,9 @@ void FanControlTab::onLEDModeChanged( int /*index*/ )
 
 void FanControlTab::onColorPickerClicked()
 {
+  if (readOnlyPreview) return;
   QColor currentColor( m_currentRed, m_currentGreen, m_currentBlue );
-  QColor color = QColorDialog::getColor( currentColor, this, "Choose LED Color" );
+  QColor color = QColorDialog::getColor( currentColor, this, "Choose LED Color", QColorDialog::DontUseNativeDialog );
   if ( !color.isValid() ) return;
   m_currentRed = color.red();
   m_currentGreen = color.green();
@@ -593,7 +615,7 @@ void FanControlTab::onColorPickerClicked()
                                m_currentRed, m_currentGreen, m_currentBlue, static_cast< int >( mode ) );
   }
   m_colorPickerButton->setStyleSheet(
-    QString( "background-color: rgb(%1, %2, %3);" ).arg( m_currentRed ).arg( m_currentGreen ).arg( m_currentBlue ) );
+    QString( "QPushButton { border-left: 4px solid rgb(%1, %2, %3); }" ).arg( m_currentRed ).arg( m_currentGreen ).arg( m_currentBlue ) );
 }
 
 void FanControlTab::setWaterCoolerAutoControl( bool autoControl )

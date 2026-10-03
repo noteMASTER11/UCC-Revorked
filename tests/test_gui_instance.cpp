@@ -3,6 +3,8 @@
 #include <QProcess>
 #include <QTimer>
 #include "GuiInstance.hpp"
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
 
 class InstanceTest : public QObject {
   Q_OBJECT
@@ -40,6 +42,16 @@ private slots:
       QCOMPARE(p->exitCode(), 0);
       QVERIFY(p->readAllStandardOutput().contains("FORWARDED"));
     }
+  }
+  void previewUsesSeparateSessionIdentity() {
+#ifdef UCC_READ_ONLY_PREVIEW
+    auto bus=QDBusConnection::sessionBus();
+    QVERIFY2(bus.registerService("com.uniwill.UccGui"),"Prototype must not claim or activate the normal GUI service");
+    QVERIFY(bus.interface()->isServiceRegistered("com.uniwill.UccGuiPreview").value());
+    bus.unregisterService("com.uniwill.UccGui");
+#else
+    QSKIP("Preview build only");
+#endif
   }
   void ownerExitAllowsANewWindow() {
     primary.terminate(); QVERIFY(primary.waitForFinished());
