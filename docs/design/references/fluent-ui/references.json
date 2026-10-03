@@ -1,0 +1,160 @@
+{
+  "project": "UCC",
+  "references": [
+    {
+      "id": "REF-1001",
+      "title": "Overview",
+      "file": "overview-light.png",
+      "source": "Codex generated image: exec-6677c3a2-b6f9-42aa-91bd-bf47a642b601.png",
+      "theme": "light",
+      "tags": [
+        "UCC",
+        "Microsoft Fluent UI",
+        "desktop",
+        "ui-mockup"
+      ],
+      "design_jobs": [
+        "composition",
+        "palette",
+        "typography",
+        "component-styling"
+      ],
+      "status": "visual-reference",
+      "created_on": "2026-10-03",
+      "feedback": {
+        "scope": "UCC design concepts",
+        "user_comment": "Красивые предложения",
+        "likes": [
+          "overall-visual-direction"
+        ],
+        "required_visual_fidelity": true
+      },
+      "notes": "Visual implementation target for composition, hierarchy and component appearance. Hardware values are illustrative; Fan Control and Monitor use the light palette from REF-1001 while retaining their composition.",
+      "sha256": "32030a549aa918b14619ae226b50a641e5baf76b12d72e5b8c545a75d5131daa"
+    },
+    {
+      "id": "REF-1002",
+      "title": "Fan Control",
+      "file": "fan-control-dark.png",
+      "source": "Codex generated image: exec-2404217a-7b3f-49b4-afcf-0935487b28bb.png",
+      "theme": "dark",
+      "tags": [
+        "UCC",
+        "Microsoft Fluent UI",
+        "desktop",
+        "ui-mockup"
+      ],
+      "design_jobs": [
+        "composition",
+        "palette",
+        "typography",
+        "component-styling"
+      ],
+      "status": "visual-reference",
+      "created_on": "2026-10-03",
+      "feedback": {
+        "scope": "UCC design concepts",
+        "user_comment": "Красивые предложения",
+        "likes": [
+          "overall-visual-direction"
+        ],
+        "required_visual_fidelity": true
+      },
+      "notes": "Visual implementation target for composition, hierarchy and component appearance. Hardware values are illustrative; Fan Control and Monitor use the light palette from REF-1001 while retaining their composition.",
+      "sha256": "c6efecc3e25878094c886fa9a11f29ff35e5f1957af104db5baad1c09afb32c5"
+    },
+    {
+      "id": "REF-1003",
+      "title": "Profiles",
+      "file": "profiles-light.png",
+      "source": "Codex generated image: exec-9c0529c6-42ab-41d1-929f-6ef4a1203444.png",
+      "theme": "light",
+      "tags": [
+        "UCC",
+        "Microsoft Fluent UI",
+        "desktop",
+        "ui-mockup"
+      ],
+      "design_jobs": [
+        "composition",
+        "palette",
+        "typography",
+        "component-styling"
+      ],
+      "status": "visual-reference",
+      "created_on": "2026-10-03",
+      "feedback": {
+        "scope": "UCC design concepts",
+        "user_comment": "Красивые предложения",
+        "likes": [
+          "overall-visual-direction"
+        ],
+        "required_visual_fidelity": true
+      },
+      "notes": "Visual implementation target for composition, hierarchy and component appearance. Hardware values are illustrative; Fan Control and Monitor use the light palette from REF-1001 while retaining their composition.",
+      "sha256": "2c89801d3778adc2887695bdec3da25bfb44e16b99f314eb8c05e9121e74a69a"
+    },
+    {
+      "id": "REF-1004",
+      "title": "Monitor",
+      "file": "monitor-dark.png",
+      "source": "Codex generated image: exec-03e99e2a-b7ce-4d65-881a-27f2805338c0.png",
+      "theme": "dark",
+      "tags": [
+        "UCC",
+        "Microsoft Fluent UI",
+        "desktop",
+        "ui-mockup"
+      ],
+      "design_jobs": [
+        "composition",
+        "palette",
+        "typography",
+        "component-styling"
+      ],
+      "status": "visual-reference",
+      "created_on": "2026-10-03",
+      "feedback": {
+        "scope": "UCC design concepts",
+        "user_comment": "Красивые предложения",
+        "likes": [
+          "overall-visual-direction"
+        ],
+        "required_visual_fidelity": true
+      },
+      "notes": "Visual implementation target for composition, hierarchy and component appearance. Hardware values are illustrative; Fan Control and Monitor use the light palette from REF-1001 while retaining their composition.",
+      "sha256": "572be37410d3909b6758db803b61722741d09448e88dc83d986049c37ce7a0b6"
+    },
+    {
+      "id": "REF-1005",
+      "title": "Keyboard & Hardware",
+      "file": "keyboard-hardware-light.png",
+      "source": "Codex generated image: exec-9001d697-badf-414f-83f0-2ad58ac3f0bf.png",
+      "theme": "light",
+      "tags": [
+        "UCC",
+        "Microsoft Fluent UI",
+        "desktop",
+        "ui-mockup"
+      ],
+      "design_jobs": [
+        "composition",
+        "palette",
+        "typography",
+        "component-styling"
+      ],
+      "status": "visual-reference",
+      "created_on": "2026-10-03",
+      "feedback": {
+        "scope": "UCC design concepts",
+        "user_comment": "Красивые предложения",
+        "likes": [
+          "overall-visual-direction"
+        ],
+        "required_visual_fidelity": true
+      },
+      "notes": "Visual implementation target for composition, hierarchy and component appearance. Hardware values are illustrative; Fan Control and Monitor use the light palette from REF-1001 while retaining their composition.",
+      "sha256": "9bb623c15d09a68ed9afb2e07f4c2d2881faa31c65f2593ef04be646a949c132"
+    }
+  ]
+}
