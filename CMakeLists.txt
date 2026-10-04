@@ -137,6 +137,8 @@ if( BUILD_TESTS )
   add_subdirectory( tests )
 endif()
 
+install(FILES LICENSE COPYING THIRD_PARTY.md DESTINATION share/doc/ucc)
+
 # Install GNOME Shell extension
 if( BUILD_GNOME )
   set( _gnome_ext_dir "share/gnome-shell/extensions/ucc@uniwill.com" )

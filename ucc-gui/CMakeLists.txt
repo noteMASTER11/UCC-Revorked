@@ -29,6 +29,8 @@ find_package( Qt6 REQUIRED COMPONENTS
 # Application sources
 set( UCC_GUI_SOURCES
   resources/fluent.qrc
+    resources/legal.qrc
+    src/AboutPage.cpp inc/AboutPage.hpp
   src/NotificationCenter.cpp inc/NotificationCenter.hpp
   src/FluentEntrance.cpp inc/FluentEntrance.hpp
   src/FluentSidebar.cpp

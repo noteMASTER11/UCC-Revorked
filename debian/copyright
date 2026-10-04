@@ -1,11 +1,17 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: ucc
+Upstream-Name: UCC Revorked
 Upstream-Contact: Erhan Bilgili <erhan.bilgili@gmail.com>
-Source: https://github.com/tuxedocomputers/uniwill-control-center
+Source: https://github.com/noteMASTER11/UCC-Revorked
+Comment: Community fork of https://github.com/nanomatters/ucc
 
 Files: *
 Copyright: 2024 Erhan Bilgili <erhan.bilgili@gmail.com>
 License: GPL-3.0-or-later
+
+Files: uccd/3rdparty/tuxedo_io_lib/*
+Copyright: 2019-2022 TUXEDO Computers GmbH <tux@tuxedocomputers.com>
+License: GPL-3.0-or-later
+Comment: TUXEDO IO code derived from https://github.com/tuxedocomputers/tuxedo-control-center
 
 Files: debian/*
 Copyright: 2024 Erhan Bilgili <erhan.bilgili@gmail.com>

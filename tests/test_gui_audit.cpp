@@ -19,6 +19,8 @@
 #include <QScopeGuard>
 #include "FanControlTab.hpp"
 #include "NotificationCenter.hpp"
+#include "version.h"
+#include <QTextBrowser>
 #include "MainWindow.hpp"
 #include "FluentTheme.hpp"
 #include "GuiVisualFixture.hpp"
@@ -276,13 +278,13 @@ private slots:
     control("TestVisualFixture");
     ucc::MainWindow window;
     auto *navigation=window.findChild<QListWidget*>("navigation");
-    QVERIFY2(navigation,"Fluent shell must expose all five pages through sidebar navigation");
-    QCOMPARE(navigation->count(),6);
+    QVERIFY2(navigation,"Fluent shell must expose all seven sections through sidebar navigation");
+    QCOMPARE(navigation->count(),7);
     auto *pages=window.findChild<QTabWidget*>("pages");
     QVERIFY(pages);
     window.show();
-    const int pageIndices[]={0,1,2,2,3,4};
-    for(int index=0;index<6;++index) {
+    const int pageIndices[]={0,1,2,2,3,4,5};
+    for(int index=0;index<7;++index) {
       if (!(navigation->item(index)->flags() & Qt::ItemIsEnabled)) continue;
       navigation->setCurrentRow(index);
       QCOMPARE(pages->currentIndex(),pageIndices[index]);
@@ -441,6 +443,32 @@ private slots:
     QCOMPARE(QApplication::focusWidget(),focused);
     QVERIFY(stats().value("writes").toArray().isEmpty());
   }
+  void aboutBuildCreditsAndBundledLicense() {
+    control("TestVisualFixture");ucc::MainWindow window;window.resize(1024,768);window.show();
+    auto *navigation=window.findChild<QListWidget*>("navigation");QCOMPARE(navigation->item(6)->text(),QString("About"));navigation->setCurrentRow(6);QTest::qWait(300);
+    auto *page=window.findChild<QScrollArea*>("aboutPage");QVERIFY(page);
+    QCOMPARE(window.findChild<QLabel*>("aboutVersion")->text(),QString(UCC_VERSION));
+    QCOMPARE(window.findChild<QLabel*>("aboutCommit")->text(),QString(UCC_RELEASE).isEmpty() ? QString("Source archive") : QString(UCC_RELEASE));
+    QCOMPARE(window.findChild<QLabel*>("aboutQtVersion")->text(),QString(qVersion()));
+    QStringList urls;for(auto *button:page->findChildren<QPushButton*>()) urls<<button->property("sourceUrl").toString();
+    QVERIFY(urls.contains("https://github.com/nanomatters/ucc"));
+    QVERIFY(urls.contains("https://github.com/tuxedocomputers/tuxedo-control-center"));
+    QVERIFY(urls.contains("https://github.com/tuxedocomputers/tuxedo-drivers"));
+    QCOMPARE(page->horizontalScrollBar()->maximum(),0);
+    bool licenseLoaded=false;
+    QTimer::singleShot(0,&window,[&] {
+      auto *dialog=window.findChild<QDialog*>("aboutLicenseDialog");
+      if(dialog) {licenseLoaded=dialog->findChild<QTextBrowser*>("aboutLicenseText")->toPlainText().contains("GNU GENERAL PUBLIC LICENSE");dialog->reject();}
+    });
+    QTest::mouseClick(page->findChild<QPushButton*>("aboutLicense"),Qt::LeftButton);QVERIFY(licenseLoaded);
+    bool noticesLoaded=false;
+    QTimer::singleShot(0,&window,[&] {
+      auto *dialog=window.findChild<QDialog*>("aboutLicenseDialog");
+      if(dialog) {noticesLoaded=dialog->findChild<QTextBrowser*>("aboutLicenseText")->toPlainText().contains("2019–2022 TUXEDO");dialog->reject();}
+    });
+    QTest::mouseClick(page->findChild<QPushButton*>("aboutNotices"),Qt::LeftButton);QVERIFY(noticesLoaded);
+    window.hide();QVERIFY(stats().value("writes").toArray().isEmpty());
+  }
   void profilePayloadPreservesManualWaterCoolerValues() {
 #ifdef UCC_READ_ONLY_PREVIEW
     QSKIP("Profile writes are disabled in preview");
@@ -496,9 +524,19 @@ private slots:
     QVERIFY2(hasConnectedStatus,"Overview must reflect the current cooler connection, not its initial placeholder");
     const QString output=qEnvironmentVariable("UCC_SCREENSHOT_DIR");
     if(!output.isEmpty()) QVERIFY(QDir().mkpath(output));
-    const QStringList names={"overview","profiles","cooler-settings","watercool-settings","monitor","keyboard-hardware"};
-    for(int i=0;i<6;++i){navigation->setCurrentRow(i);QTest::qWait(i==3 ? 2400 : 400);if(i==2 || i==3){auto *cooling=window.findChild<QTabWidget *>("coolingPages");QVERIFY(cooling);QCOMPARE(cooling->currentIndex(),i-2);QVERIFY(!cooling->tabBar()->isVisible());}if(!output.isEmpty()) QVERIFY(window.grab().save(output+"/"+names[i]+".png"));}
+    const QStringList names={"overview","profiles","cooler-settings","watercool-settings","monitor","keyboard-hardware","about"};
+    for(int i=0;i<7;++i){navigation->setCurrentRow(i);QTest::qWait(i==3 ? 2400 : 400);if(i==2 || i==3){auto *cooling=window.findChild<QTabWidget *>("coolingPages");QVERIFY(cooling);QCOMPARE(cooling->currentIndex(),i-2);QVERIFY(!cooling->tabBar()->isVisible());}if(!output.isEmpty()) QVERIFY(window.grab().save(output+"/"+names[i]+".png"));}
     if(!output.isEmpty()) {
+      navigation->setCurrentRow(6);QTest::qWait(350);
+      auto *about=window.findChild<QScrollArea*>("aboutPage");QVERIFY(about);
+      about->verticalScrollBar()->setValue(about->verticalScrollBar()->maximum());
+      QTest::qWait(80);QVERIFY(window.grab().save(output+"/about-bottom.png"));
+      about->verticalScrollBar()->setValue(0);
+      QTimer::singleShot(100,&window,[&] {
+        auto *dialog=window.findChild<QDialog*>("aboutLicenseDialog");
+        if(dialog) {dialog->grab().save(output+"/about-license.png");dialog->reject();}
+      });
+      QTest::mouseClick(about->findChild<QPushButton*>("aboutLicense"),Qt::LeftButton);
       navigation->setCurrentRow(1);QTest::qWait(350);
       for(auto *scroll:window.findChild<QTabWidget*>("pages")->widget(1)->findChildren<QScrollArea*>()) scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
       QTest::qWait(80);QVERIFY(window.grab().save(output+"/profiles-bottom.png"));
@@ -534,7 +572,7 @@ private slots:
       QVERIFY(window.grab().save(output+"/notifications-context.png"));center->hide();
     }
     window.resize(1024,768);
-    for(int i=0;i<6;++i){navigation->setCurrentRow(i);QTest::qWait(350);QVERIFY(window.width()<=1024);if(!output.isEmpty()) QVERIFY(window.grab().save(output+"/"+names[i]+"-small.png"));}
+    for(int i=0;i<7;++i){navigation->setCurrentRow(i);QTest::qWait(350);QVERIFY(window.width()<=1024);if(!output.isEmpty()) QVERIFY(window.grab().save(output+"/"+names[i]+"-small.png"));}
     window.hide();
     QVERIFY2(stats().value("writes").toArray().isEmpty(),"Rendering pages must not change hardware or profile settings");
   }

@@ -92,6 +92,8 @@ QIcon icon(const QString &name) {
     if(name=="Light") sun(QPointF(12,12),4,false);
     else if(name=="Dark") moon(QPointF(12,12),8);
     else {sun(QPointF(10,12),4,true);moon(QPointF(16,12),6);}
+  } else if(name=="About") {
+    p.drawEllipse(QRectF(3,3,18,18));p.drawLine(12,11,12,17);p.drawPoint(12,7);
   } else if(name=="Overview") {
     QPolygonF poly{{3,11},{12,3},{21,11},{21,21},{15,21},{15,14},{9,14},{9,21},{3,21},{3,11}}; p.drawPolyline(poly);
   } else if(name=="Profiles") {
@@ -199,6 +201,8 @@ QWidget#gpuDetails { background: @inset; border: none; border-radius: 6px; }
 QLabel#detailValue { font-size: 13px; font-weight: 600; color: @text; }
 QLabel#settingValue { font-size: 14px; font-weight: 600; color: @accent; }
 QFrame#metricDivider { border: none; background: @border; }
+QLabel[aboutMetadata="true"] { font-size: 16px; font-weight: 600; }
+QLabel#aboutMark { background: @selected; color: @accent; border-radius: 12px; font-size: 20px; font-weight: 600; }
 QLabel#cardTitle { font-size: 16px; font-weight: 600; }
 QLabel#previewBadge { background: @selected; color: @accent; border-radius: 4px; padding: 6px 10px; }
 QListWidget#navigation { background: transparent; border: none; outline: none; font-size: 14px; }

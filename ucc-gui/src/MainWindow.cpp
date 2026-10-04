@@ -16,6 +16,7 @@
 #include "MainWindow.hpp"
 #include "FluentTheme.hpp"
 #include "NotificationCenter.hpp"
+#include "AboutPage.hpp"
 #include "FluentSidebar.hpp"
 #include "FluentEntrance.hpp"
 #include "PreviewMode.hpp"
@@ -244,7 +245,7 @@ void MainWindow::setupUI()
   sideLayout->addWidget(device);sideLayout->addSpacing(20);
   auto *navigation=new QListWidget(sidebar);navigation->setObjectName("navigation");
   navigation->setIconSize(QSize(24,24));
-  const QStringList labels={"Overview","Profiles","Cooler Settings","Watercool Settings","Monitor","Keyboard & Hardware"};
+  const QStringList labels={"Overview","Profiles","Cooler Settings","Watercool Settings","Monitor","Keyboard & Hardware","About"};
   for(const auto &label:labels) new QListWidgetItem(FluentTheme::icon(label),label,navigation);
   sideLayout->addWidget(navigation,1);
   auto *footer=new QWidget(sidebar);footer->setObjectName("sidebarFooter");
@@ -293,12 +294,12 @@ void MainWindow::setupUI()
   auto showNavigationHeading=[heading,subtitle,labels](int row) {
     if(row<0 || row>=labels.size()) return;
     heading->setText(labels[row]);
-    const QStringList descriptions={"Your system at a glance","Power, cooling and lighting in one profile","Shape CPU and GPU cooling for your profile","Water cooling, pump and lighting controls","Live system telemetry","Backlight and device controls"};
+    const QStringList descriptions={"Your system at a glance","Power, cooling and lighting in one profile","Shape CPU and GPU cooling for your profile","Water cooling, pump and lighting controls","Live system telemetry","Backlight and device controls","Build information, project origins and open-source acknowledgements"};
     subtitle->setText(descriptions[row]);
   };
   connect(navigation,&QListWidget::currentRowChanged,this,[this,showNavigationHeading](int row){
-    if(row<0 || row>5) return;
-    const int pages[]={0,1,2,2,3,4};
+    if(row<0 || row>6) return;
+    const int pages[]={0,1,2,2,3,4,5};
     if(row==3 && !m_waterCoolerSupported) return;
     if(m_fanControlTab && (row==2 || row==3)) m_fanControlTab->findChild<QTabWidget *>("coolingPages")->setCurrentIndex(row-2);
     const bool samePage=m_tabs->currentIndex()==pages[row];
@@ -306,7 +307,7 @@ void MainWindow::setupUI()
     if(samePage) m_entrance->play();
   });
   connect(m_tabs,&QTabWidget::currentChanged,navigation,[this,navigation,showNavigationHeading](int index){
-    if(index<0 || index>4) return;
+    if(index<0 || index>5) return;
     int row=index<3 ? index : index+1;
     if(index==2 && m_fanControlTab) row=2+m_fanControlTab->findChild<QTabWidget *>("coolingPages")->currentIndex();
     const QSignalBlocker blocked(navigation);navigation->setCurrentRow(row);showNavigationHeading(row);
@@ -346,6 +347,7 @@ void MainWindow::setupUI()
 
   setupKeyboardBacklightPage();
   setupHardwarePage();
+  m_tabs->addTab(createAboutPage(this),"About");
   if(!m_waterCoolerSupported) {navigation->item(3)->setFlags(navigation->item(3)->flags() & ~Qt::ItemIsEnabled);navigation->item(3)->setToolTip("Water cooling is not supported by this device.");}
   navigation->setCurrentRow(0);
 }
