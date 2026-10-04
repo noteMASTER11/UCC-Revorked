@@ -18,6 +18,7 @@ while `uccd` performs hardware operations through the kernel driver and Bluetoot
 | **Overview** | CPU and GPU identification, temperature, fan duty, frequency and power. GPU load, VRAM load, P-state and clock offsets are grouped as secondary details. Connected water-cooler controls include immediate Fan/Pump presets and an enable toggle. |
 | **Profiles** | A compact profile dropdown with Apply, Save, Copy and Remove actions. Configure CPU cores, governor and EPP, frequency settings, supported power limits, charging, display settings, fan and keyboard profile assignments. Assign profiles to AC, battery and water-cooler states. |
 | **Cooler Settings** | Separate CPU/GPU fan curves, shared-speed behavior where supported, fan-profile selection, application, copying, saving and removal. |
+| **About** | Build version/commit, Qt runtime, upstream credits, open-source components and bundled license/attribution texts. |
 | **Watercool Settings** | Cooler enable toggle, manual fan speed, pump voltage, LED color/effects, water-cooler fan curve and pump-voltage curve. Accessible directly from the sidebar. |
 | **Monitor** | Temperature, fan duty, power, clocks and core-voltage history. Select metrics, use separate or unified graphs, pause, zoom and inspect points with crosshair/sticky markers. Smooth chart presentation is independent of telemetry polling; the power axis tops out at 250 W. |
 | **Keyboard & Hardware** | Keyboard lighting profiles, per-key selection/color, multi-key selection, global color and brightness. Hardware controls include webcam, Fn Lock and display brightness when the device exposes them. |
@@ -96,6 +97,7 @@ illustrative. Click an image to see its full size.
 | Watercool Settings | ![Watercool Settings — Light](screenshots/fluent/light/watercool-settings.png) | ![Watercool Settings — Dark](screenshots/fluent/dark/watercool-settings.png) |
 | Monitor | ![Monitor — Light](screenshots/fluent/light/monitor.png) | ![Monitor — Dark](screenshots/fluent/dark/monitor.png) |
 | Keyboard & Hardware | ![Keyboard & Hardware — Light](screenshots/fluent/light/keyboard-hardware.png) | ![Keyboard & Hardware — Dark](screenshots/fluent/dark/keyboard-hardware.png) |
+| About | ![About — Light](screenshots/fluent/light/about.png) | ![About — Dark](screenshots/fluent/dark/about.png) |
 | Notifications | ![Notifications — Light](screenshots/fluent/light/notifications.png) | ![Notifications — Dark](screenshots/fluent/dark/notifications.png) |
 
 The approved [design references](docs/design/references/fluent-ui/) and detailed
@@ -263,9 +265,12 @@ useful before treating every upstream hardware feature as verified.
 
 Based on [nanomatters/ucc](https://github.com/nanomatters/ucc), starting from
 [`d2987af`](https://github.com/nanomatters/ucc/commit/d2987af6cbaa39a7357dc610d107da269d42b3a0),
-with TUXEDO IO code from TUXEDO Control Center and hardware research from
+with TUXEDO IO code from [TUXEDO Control Center](https://github.com/tuxedocomputers/tuxedo-control-center),
+[tuxedo-drivers](https://github.com/tuxedocomputers/tuxedo-drivers) hardware integration and research from
 [Mechrevo-Yaoshi-Linux](https://github.com/noteMASTER11/Mechrevo-Yaoshi-Linux).
 
 **GPL-3.0-or-later.** Separate driver sources and patches retain their upstream
 licensing. The project is a community fork; the Fluent-style redesign is not
 an official Microsoft product.
+
+The complete GPL v3 text is in [COPYING](COPYING). See [third-party acknowledgements](THIRD_PARTY.md) for component roles, licenses and retained notices. These documents are also available offline from **About**.
