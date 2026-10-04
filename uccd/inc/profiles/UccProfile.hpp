@@ -94,6 +94,8 @@ struct UccProfileFanControl
   std::string fanProfile;
   bool sameSpeed; // when true, all fans are driven at the same percent (highest)
   bool autoControlWC; // when true, automatically control water cooler based on system temperature
+  int manualFanSpeed = -1; // -1 means no saved manual setting
+  int manualPumpVoltage = -1; // BLE voltage code: 0, 2, 3, 4
   bool enableWaterCooler; // when true, water cooler BLE scanning/connection is enabled
 
   // Embedded fan curve tables (populated when profile JSON includes them)

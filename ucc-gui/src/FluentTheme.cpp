@@ -174,6 +174,10 @@ QWidget { color: @text; }
 QMainWindow { background: transparent; }
 QWidget#contentPane, QTabWidget#pages, QTabWidget#pages::pane { background: @canvas; border: none; }
 QFrame#sidebar { background: transparent; border: none; border-right: 1px solid @border; }
+QFrame#notificationPanel { background: @surface; border: 1px solid @border; border-radius: 8px; }
+QListWidget#notificationList { background: transparent; border: none; }
+QLabel#notificationTitle { font-size: 13px; font-weight: 600; }
+QLabel#notificationTitle[unread="true"] { color: @accent; }
 QFrame#card, QGroupBox { background: @surface; border: 1px solid @border; border-radius: 8px; }
 QGroupBox { margin-top: 12px; padding: 18px 12px 12px; font-weight: 600; }
 QGroupBox::title { subcontrol-origin: margin; left: 16px; padding: 0 4px; }
@@ -181,6 +185,9 @@ QLabel { background: transparent; border: none; }
 QLabel#pageTitle { font-size: 28px; font-weight: 600; }
 QLabel#subtitle { color: @secondary; font-size: 13px; }
 QLabel#muted { color: @secondary; font-size: 12px; }
+QLabel#sidebarStatusText { color: @secondary; font-size: 12px; font-weight: 400; }
+QLabel#sidebarStatusIndicator { font-size: 12px; font-weight: 400; }
+QLabel#sidebarStatusIndicator[status="accent"] { color: @accent; }
 QLabel#sectionTitle { font-size: 20px; font-weight: 600; }
 QLabel#subheading { font-size: 14px; font-weight: 600; color: @secondary; }
 QLabel#heroValue { font-size: 40px; font-weight: 600; color: @text; }

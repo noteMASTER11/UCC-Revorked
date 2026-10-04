@@ -210,13 +210,19 @@ void DashboardTab::setupUI()
     const int speed=m_waterCoolerFanSelector->itemData(index).toInt();
     const bool applied=speed<0 ? m_profileManager->getClient()->setWaterCoolerAutoControl(true)
                                : m_profileManager->getClient()->setWaterCoolerFanSpeed(speed);
-    if(applied) m_waterCoolerAutoControl=speed<0;
+    if(applied) {
+      m_waterCoolerAutoControl=speed<0;
+      emit waterCoolerManualChanged(speed<0, speed<0 ? "Water cooler automatic control enabled" : QString("Water cooler fan set to %1%").arg(speed));
+    }
     else refreshWaterCoolerStatus();
   });
   connect(m_waterCoolerPumpSelector,&QComboBox::activated,this,[this](int index){
     if(readOnlyPreview){m_previewPumpEdited=true;return;}
     if(index<0) return;
-    if(m_profileManager->getClient()->setWaterCoolerPumpVoltage(m_waterCoolerPumpSelector->itemData(index).toInt())) m_waterCoolerAutoControl=false;
+    if(m_profileManager->getClient()->setWaterCoolerPumpVoltage(m_waterCoolerPumpSelector->itemData(index).toInt())) {
+      m_waterCoolerAutoControl=false;
+      emit waterCoolerManualChanged(false,"Water cooler pump set to "+m_waterCoolerPumpSelector->itemText(index));
+    }
     else refreshWaterCoolerStatus();
   });
   m_waterCoolerGrid=new QGridLayout;m_waterCoolerGrid->addWidget(waterValues,0,0);waterLayout->addLayout(m_waterCoolerGrid);
@@ -306,11 +312,14 @@ void DashboardTab::updateWaterCoolerStatus()
       const int speed=values.value("GetWaterCoolerFanSpeed").toInt();
       const int index=m_waterCoolerFanSelector->findData(m_waterCoolerAutoControl ? -1 : speed);
       m_waterCoolerFanSelector->setCurrentIndex(index);
-      if(index<0) m_waterCoolerFanSelector->setEditText(QString::number(speed)+"%");
+      if(index<0) m_waterCoolerFanSelector->setEditText(speed>=0 ? QString::number(speed)+"%" : QStringLiteral("—"));
       if(m_waterCoolerAutoControl) m_waterCoolerFanSelector->setToolTip("Auto · current fan speed: "+QString::number(speed)+"%");
     }
-    if(!m_previewPumpEdited && values.contains("GetWaterCoolerPumpLevel"))
-      m_waterCoolerPumpSelector->setCurrentIndex(m_waterCoolerPumpSelector->findData(values.value("GetWaterCoolerPumpLevel").toInt()));
+    if(!m_previewPumpEdited && values.contains("GetWaterCoolerPumpLevel")) {
+      const int index=m_waterCoolerPumpSelector->findData(values.value("GetWaterCoolerPumpLevel").toInt());
+      m_waterCoolerPumpSelector->setCurrentIndex(index);
+      if(index<0) m_waterCoolerPumpSelector->setEditText(QStringLiteral("—"));
+    }
 
     auto setWCStatus = [ this ]( const bool connected )
     {
@@ -334,11 +343,11 @@ void DashboardTab::updateWaterCoolerStatus()
     const QString searchingColorHex = FluentTheme::colors().accent.name();  // Dark blue for searching
 
     // Keep the visible card and status bar in sync.
-    auto emitStatus = [this]( const QString &statusText, const QString &colorHex )
+    auto emitStatus = [this]( const QString &statusText, const QString & )
     {
       m_waterCoolerStatusLabel->setText(statusText);
       emit waterCoolerStatusChanged(
-        QString("<span style='color: %1;'>&#9679;</span> Water Cooler: %2").arg( colorHex, statusText ) );
+        QString("Water Cooler: %1").arg(statusText) );
     };
 
     // Status progression: Disabled -> Disconnected -> Searching -> Connected

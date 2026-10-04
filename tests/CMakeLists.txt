@@ -74,6 +74,7 @@ if(DBUS_RUN_SESSION_EXECUTABLE AND BUILD_GUI)
     ../ucc-gui/src/MonitorTab.cpp ../ucc-gui/inc/MonitorTab.hpp)
   target_sources(test_gui_audit PRIVATE
     ../ucc-gui/resources/fluent.qrc
+    ../ucc-gui/src/NotificationCenter.cpp ../ucc-gui/inc/NotificationCenter.hpp
     ../ucc-gui/src/FluentEntrance.cpp
     ../ucc-gui/src/FluentSidebar.cpp
     ../ucc-gui/src/FluentTheme.cpp ../ucc-gui/inc/FluentTheme.hpp

@@ -94,6 +94,7 @@ public:
   void setEditorsEditable( bool editable );
 
 signals:
+  void waterCoolerManualChanged(bool automatic, const QString &message);
   void applyRequested();
   void saveRequested();
   void revertRequested();

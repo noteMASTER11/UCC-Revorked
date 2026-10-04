@@ -56,6 +56,7 @@ namespace ucc
     void refreshWaterCoolerStatus();
 
   signals:
+    void waterCoolerManualChanged(bool automatic, const QString &message);
     void waterCoolerEnableChanged( bool enabled );
     /** Emitted whenever the water-cooler status changes (rich-text, e.g. for the status bar). */
     void waterCoolerStatusChanged( const QString &richText );

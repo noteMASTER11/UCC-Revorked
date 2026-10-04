@@ -595,6 +595,7 @@ private:
   void serializeProfilesJSON();
   void applyProfileForCurrentState();
   void applyFanAndPumpSettings( const UccProfile &profile );
+  void applyManualWaterCoolerSettings(const UccProfile &profile);
   void applyCTGPFromProfile( const UccProfile &profile );
   void fillDeviceSpecificDefaults( std::vector< UccProfile > &profiles );
   void snapProfileFrequencies( UccProfile &profile );

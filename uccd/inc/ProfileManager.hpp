@@ -229,6 +229,10 @@ public:
       profile.fan.fanProfile = extractString( fanJson, "fanProfile", "fan-balanced" );
       profile.fan.sameSpeed = extractBool( fanJson, "sameSpeed", true );
       profile.fan.autoControlWC = extractBool( fanJson, "autoControlWC", true );
+      const int manualFan = extractInt( fanJson, "manualFanSpeed", -1 );
+      const int manualPump = extractInt( fanJson, "manualPumpVoltage", -1 );
+      profile.fan.manualFanSpeed = manualFan >= 0 && manualFan <= 100 ? manualFan : -1;
+      profile.fan.manualPumpVoltage = manualPump == 0 || manualPump == 2 || manualPump == 3 || manualPump == 4 ? manualPump : -1;
       profile.fan.enableWaterCooler = extractBool( fanJson, "enableWaterCooler", ucc::WATER_COOLER_INITIAL_STATE );
 
       // Debug: log the parsed fan settings
@@ -636,6 +640,8 @@ public:
         << "\"fanProfile\":\"" << jsonEscape( profile.fan.fanProfile ) << "\","
         << "\"sameSpeed\":" << ( profile.fan.sameSpeed ? "true" : "false" ) << ","
         << "\"autoControlWC\":" << ( profile.fan.autoControlWC ? "true" : "false" ) << ","
+        << "\"manualFanSpeed\":" << profile.fan.manualFanSpeed << ","
+        << "\"manualPumpVoltage\":" << profile.fan.manualPumpVoltage << ","
         << "\"enableWaterCooler\":" << ( profile.fan.enableWaterCooler ? "true" : "false" );
 
     // Embed fan tables if present

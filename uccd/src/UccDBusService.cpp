@@ -178,6 +178,8 @@ static std::string profileToJSON( const UccProfile &profile,
       << "\"fanProfile\":\"" << jsonEscape( profile.fan.fanProfile ) << "\" ,"
       << "\"sameSpeed\":" << ( profile.fan.sameSpeed ? "true" : "false" ) << ","
       << "\"autoControlWC\":" << ( profile.fan.autoControlWC ? "true" : "false" ) << ","
+      << "\"manualFanSpeed\":" << profile.fan.manualFanSpeed << ","
+      << "\"manualPumpVoltage\":" << profile.fan.manualPumpVoltage << ","
       << "\"enableWaterCooler\":" << ( profile.fan.enableWaterCooler ? "true" : "false" );
 
   // Embed fan tables if present
@@ -1850,6 +1852,10 @@ bool UccDBusInterfaceAdaptor::SetWaterCoolerFanSpeed( int dutyCyclePercent )
   if ( m_service && m_service->m_waterCoolerWorker )
   {
     if (!m_service->m_waterCoolerWorker->setFanSpeed(dutyCyclePercent)) return false;
+    m_service->m_activeProfile.fan.manualFanSpeed = dutyCyclePercent;
+    const int currentPump = m_service->m_waterCoolerWorker->getLastPumpVoltage();
+    if (currentPump == 0 || currentPump == 2 || currentPump == 3 || currentPump == 4)
+      m_service->m_activeProfile.fan.manualPumpVoltage = currentPump;
     updateWaterCoolerAutoControl(false);
     return true;
   }
@@ -1866,6 +1872,10 @@ bool UccDBusInterfaceAdaptor::SetWaterCoolerPumpVoltage( int voltage )
   if ( m_service && m_service->m_waterCoolerWorker )
   {
     if (!m_service->m_waterCoolerWorker->setPumpVoltage(voltage)) return false;
+    m_service->m_activeProfile.fan.manualPumpVoltage = voltage;
+    const int currentFan = m_service->m_waterCoolerWorker->getLastFanSpeed();
+    if (currentFan >= 0 && currentFan <= 100)
+      m_service->m_activeProfile.fan.manualFanSpeed = currentFan;
     updateWaterCoolerAutoControl(false);
     return true;
   }
@@ -1922,12 +1932,13 @@ bool UccDBusInterfaceAdaptor::TurnOffWaterCoolerPump()
 
 void UccDBusInterfaceAdaptor::updateWaterCoolerAutoControl(bool enabled)
 {
-  if (m_service->m_activeProfile.fan.autoControlWC == enabled) return;
+  const bool modeChanged = m_service->m_activeProfile.fan.autoControlWC != enabled;
   m_service->m_activeProfile.fan.autoControlWC = enabled;
   m_service->updateDBusActiveProfileData();
-  emitProfileChanged(m_service->m_activeProfile.id,
-                     m_service->m_activeProfile.keyboard.keyboardProfileId,
-                     m_service->m_activeProfile.fan.fanProfile);
+  if (modeChanged)
+    emitProfileChanged(m_service->m_activeProfile.id,
+                       m_service->m_activeProfile.keyboard.keyboardProfileId,
+                       m_service->m_activeProfile.fan.fanProfile);
 }
 
 bool UccDBusInterfaceAdaptor::SetWaterCoolerAutoControl(bool enabled)
@@ -2255,6 +2266,8 @@ UccDBusService::UccDBusService()
         m_metricsStore.push( MetricId::CpuTemp, timestamp, temp );
       else if ( fanIndex == 1 )
         m_metricsStore.push( MetricId::GpuTemp, timestamp, temp );
+
+      if (fanIndex == 0) applyManualWaterCoolerSettings(m_activeProfile);
 
       // Auto-control water cooler fan and pump voltage based on CPU temperature
       if ( m_dbusData.waterCoolerConnected.load() && m_activeProfile.fan.autoControlWC && fanIndex == 0 )
@@ -3348,6 +3361,8 @@ bool UccDBusService::applyProfileJSON( const std::string &profileJSON )
                   << " Pump=" << pumpTable.size() << ")" << std::endl;
       }
 
+      applyManualWaterCoolerSettings(profile);
+
       // Apply pump auto-control if water cooler is connected and autoControlWC is enabled
       if ( profile.fan.autoControlWC && m_waterCoolerWorker && m_dbusData.waterCoolerConnected.load()
            && !pumpTable.empty() )
@@ -4200,6 +4215,8 @@ void UccDBusService::applyFanAndPumpSettings( const UccProfile &profile )
                 << " Pump=" << pumpTable.size() << ")" << std::endl;
     }
 
+    applyManualWaterCoolerSettings(profile);
+
     // Apply pump auto-control if water cooler is connected and autoControlWC is enabled
     if ( profile.fan.autoControlWC && m_waterCoolerWorker && m_dbusData.waterCoolerConnected.load()
          && !pumpTable.empty() )
@@ -4670,4 +4687,16 @@ bool UccDBusService::syncOutputPortsSetting()
   }
 
   return settingsChanged;
+}
+
+void UccDBusService::applyManualWaterCoolerSettings(const UccProfile &profile)
+{
+  if (profile.fan.autoControlWC || !m_waterCoolerWorker || !m_dbusData.waterCoolerConnected.load()) return;
+  const int fan = profile.fan.manualFanSpeed;
+  const int pump = profile.fan.manualPumpVoltage;
+  // Retry after reconnect or a failed send; don't resend values already accepted by BLE.
+  if (fan >= 0 && fan <= 100 && m_waterCoolerWorker->getLastFanSpeed() != fan)
+    m_waterCoolerWorker->setFanSpeed(fan);
+  if ((pump == 0 || pump == 2 || pump == 3 || pump == 4) && m_waterCoolerWorker->getLastPumpVoltage() != pump)
+    m_waterCoolerWorker->setPumpVoltage(pump);
 }

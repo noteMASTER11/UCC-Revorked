@@ -18,6 +18,7 @@
 #include <QColorDialog>
 #include <QScopeGuard>
 #include "FanControlTab.hpp"
+#include "NotificationCenter.hpp"
 #include "MainWindow.hpp"
 #include "FluentTheme.hpp"
 #include "GuiVisualFixture.hpp"
@@ -28,6 +29,7 @@
 class AuditDaemon : public QDBusVirtualObject {
   QJsonArray writes;
   QJsonObject reads;
+  QString runtimeProfile,lastAppliedProfile;
   bool failReads=false;
   bool visualFixture=false;
   bool coolerAuto=false;
@@ -38,6 +40,9 @@ public:
   }
   bool handleMessage(const QDBusMessage &msg,const QDBusConnection &bus) override {
     const auto method=msg.member(); QVariant result;
+    if(method=="TestRuntimeProfile") {runtimeProfile=msg.arguments().value(0).toString();bus.send(msg.createReply(true));return true;}
+    if(method=="TestLastAppliedProfile") {bus.send(msg.createReply(lastAppliedProfile));return true;}
+    if(method=="GetActiveProfileJSON" && !runtimeProfile.isEmpty()) {bus.send(msg.createReply(runtimeProfile));return true;}
     if(visualFixture) if(auto reply=visualFixtureReply(method)){bus.send(msg.createReply(*reply));return true;}
     if (method=="TestCoolerAuto") {coolerAuto=msg.arguments().value(0).toBool();result=true;}
     else if(method=="TestCoolerEnabled") {coolerEnabled=msg.arguments().value(0).toBool();result=true;}
@@ -45,10 +50,10 @@ public:
     else if(method=="IsWaterCoolerAutoControlEnabled") result=coolerAuto;
     else if (method=="TestVisualFixture") {visualFixture=true;result=true;}
     else if (method=="TestStats") result=QString::fromUtf8(QJsonDocument(QJsonObject{{"writes",writes},{"reads",reads}}).toJson());
-    else if (method=="TestReset") { writes={};reads={};failReads=false;visualFixture=false;coolerAuto=false;coolerEnabled=false;result=true; }
+    else if (method=="TestReset") { writes={};reads={};runtimeProfile.clear();lastAppliedProfile.clear();failReads=false;visualFixture=false;coolerAuto=false;coolerEnabled=false;result=true; }
     else if (method=="TestFailReads") { failReads=msg.arguments().value(0).toBool();result=true; }
     else if (method.startsWith("Set") || method.startsWith("TurnOff") || method=="EnableWaterCooler" || method.startsWith("Apply") || method.startsWith("Save") || method.startsWith("Delete") || method.startsWith("Revert")) {
-      writes.append(method);result=true;
+      writes.append(method);if(method=="ApplyProfile") lastAppliedProfile=msg.arguments().value(0).toString();result=true;
     } else if (method.endsWith("Supported") || method=="GetWebcamSWStatus" || method=="GetFnLockStatus" || method=="IsDeviceSupported" || method=="IsWaterCoolerEnabled") result=false;
     else if (method=="GetAvailableGovernors" || method=="GetAvailableEPPs") result=QString("[]");
     else if (method.startsWith("GetWaterCooler") || method=="GetMonitorDataSince") {
@@ -268,6 +273,7 @@ private slots:
     QVERIFY(stats().value("writes").toArray().isEmpty());
   }
   void sidebarNavigationPreservesPages() {
+    control("TestVisualFixture");
     ucc::MainWindow window;
     auto *navigation=window.findChild<QListWidget*>("navigation");
     QVERIFY2(navigation,"Fluent shell must expose all five pages through sidebar navigation");
@@ -282,8 +288,20 @@ private slots:
       QCOMPARE(pages->currentIndex(),pageIndices[index]);
     }
     QVERIFY(!window.statusBar()->isVisible());
-    auto *status=window.findChild<QLabel *>("activeProfileStatus");QVERIFY(status);
-    QCOMPARE(status->parentWidget()->objectName(),QString("sidebarFooter"));
+    auto *footer=window.findChild<QWidget *>("sidebarFooter");QVERIFY(footer);
+    window.statusBar()->showMessage("Keyboard profile 'Main' saved");
+    auto labels=footer->findChildren<QLabel *>("sidebarStatusText");QVERIFY(labels.size()>=3);
+    for(auto theme:{ucc::FluentTheme::Mode::Light,ucc::FluentTheme::Mode::Dark}) {
+      ucc::FluentTheme::setMode(theme,false);QTest::qWait(20);
+      for(auto *label:labels) {
+        QCOMPARE(label->font(),labels.first()->font());
+        QCOMPARE(label->font().pixelSize(),12);
+        QCOMPARE(label->font().weight(),QFont::Normal);
+        QCOMPARE(label->palette().color(QPalette::WindowText),ucc::FluentTheme::colors().secondary);
+        QCOMPARE(label->mapTo(footer,QPoint()).x(),labels.first()->mapTo(footer,QPoint()).x());
+        QVERIFY(!label->text().contains("<b>"));
+      }
+    }
     window.hide();
     QVERIFY(stats().value("writes").toArray().isEmpty());
   }
@@ -423,6 +441,47 @@ private slots:
     QCOMPARE(QApplication::focusWidget(),focused);
     QVERIFY(stats().value("writes").toArray().isEmpty());
   }
+  void profilePayloadPreservesManualWaterCoolerValues() {
+#ifdef UCC_READ_ONLY_PREVIEW
+    QSKIP("Profile writes are disabled in preview");
+#endif
+    control("TestVisualFixture");
+    control("TestRuntimeProfile",{QString(R"({"id":"balanced","name":"Balanced","fan":{"autoControlWC":false,"manualFanSpeed":70,"manualPumpVoltage":3}})")});
+    ucc::MainWindow window;
+    QVERIFY(QMetaObject::invokeMethod(&window,"onApplyClicked"));
+    auto payload=QJsonDocument::fromJson(control("TestLastAppliedProfile").toString().toUtf8()).object()["fan"].toObject();
+    QCOMPARE(payload["manualFanSpeed"].toInt(),70);QCOMPARE(payload["manualPumpVoltage"].toInt(),3);
+    QVERIFY(!payload["autoControlWC"].toBool(true));
+  }
+  void notificationHistoryAndReadControls() {
+    control("TestVisualFixture");
+    ucc::MainWindow window;window.show();
+    auto *center=window.findChild<ucc::NotificationCenter*>();QVERIFY(center);
+    auto *bell=window.findChild<QPushButton*>("notificationBell");QVERIFY(bell);
+    center->clearAll();
+    auto *navigation=window.findChild<QListWidget*>("navigation");navigation->setCurrentRow(3);
+    window.statusBar()->showMessage("Water cooler fan set to 70%");
+    QCOMPARE(center->eventCount(),1);QCOMPARE(center->unreadCount(),1);
+    center->addEvent("Profiles","Profile saved",QDateTime(QDate::currentDate(),QTime(12,34,56)));
+    QCOMPARE(bell->property("unreadCount").toInt(),2);
+    QTest::mouseClick(bell,Qt::LeftButton);QVERIFY(center->isVisible());QCOMPARE(center->unreadCount(),2);
+    auto *list=center->findChild<QListWidget*>("notificationList");QCOMPARE(list->count(),2);
+    auto *card=list->itemWidget(list->item(0));QVERIFY(card);
+    QVERIFY(card->findChild<QLabel*>("notificationTitle")->text().contains("Profiles"));
+    bool hasTime=false;for(auto *label:card->findChildren<QLabel*>()) hasTime |= label->text().contains("12:34:56");QVERIFY(hasTime);
+    QVERIFY(list->item(0)->sizeHint().height()>70);
+    QTest::mouseClick(center->findChild<QPushButton*>("notificationsReadAll"),Qt::LeftButton);
+    QCOMPARE(center->eventCount(),2);QCOMPARE(center->unreadCount(),0);
+    center->addEvent("Watercool Settings","Pump set to 8 V");
+    QTest::mouseClick(list->viewport(),Qt::LeftButton,Qt::NoModifier,list->visualItemRect(list->item(0)).center());
+    QCOMPARE(center->unreadCount(),0);
+    QTest::mouseClick(center->findChild<QPushButton*>("notificationsClearAll"),Qt::LeftButton);
+    QCOMPARE(center->eventCount(),0);QCOMPARE(bell->property("unreadCount").toInt(),0);
+    center->addEvent("UCC","Ready");center->addEvent("UCC","");QCOMPARE(center->eventCount(),0);
+    for(int i=0;i<205;++i) center->addEvent("Profiles",QString::number(i));
+    QCOMPARE(center->eventCount(),200);center->hide();window.hide();
+    QVERIFY(stats().value("writes").toArray().isEmpty());
+  }
   void renderReferencePages() {
     ucc::FluentTheme::setMode(qEnvironmentVariable("UCC_AUDIT_THEME")=="dark" ? ucc::FluentTheme::Mode::Dark : ucc::FluentTheme::Mode::Light,false);
     control("TestVisualFixture");
@@ -431,13 +490,14 @@ private slots:
     auto *navigation=window.findChild<QListWidget*>("navigation");QVERIFY(navigation);
     auto *profilesCombo=window.findChild<QComboBox*>("profileName");QVERIFY(profilesCombo);QCOMPARE(profilesCombo->count(),3);
     auto *keyboard=window.findChild<ucc::KeyboardVisualizerWidget*>();QVERIFY(keyboard);
+    QVERIFY(window.findChild<ucc::FanControlTab*>()->isWaterCoolerEnabled());
     bool hasConnectedStatus=false;
     for(auto *label:window.findChildren<QLabel*>()) hasConnectedStatus |= label->text()=="Connected";
     QVERIFY2(hasConnectedStatus,"Overview must reflect the current cooler connection, not its initial placeholder");
     const QString output=qEnvironmentVariable("UCC_SCREENSHOT_DIR");
     if(!output.isEmpty()) QVERIFY(QDir().mkpath(output));
     const QStringList names={"overview","profiles","cooler-settings","watercool-settings","monitor","keyboard-hardware"};
-    for(int i=0;i<6;++i){navigation->setCurrentRow(i);QTest::qWait(400);if(i==2 || i==3){auto *cooling=window.findChild<QTabWidget *>("coolingPages");QVERIFY(cooling);QCOMPARE(cooling->currentIndex(),i-2);QVERIFY(!cooling->tabBar()->isVisible());}if(!output.isEmpty()) QVERIFY(window.grab().save(output+"/"+names[i]+".png"));}
+    for(int i=0;i<6;++i){navigation->setCurrentRow(i);QTest::qWait(i==3 ? 2400 : 400);if(i==2 || i==3){auto *cooling=window.findChild<QTabWidget *>("coolingPages");QVERIFY(cooling);QCOMPARE(cooling->currentIndex(),i-2);QVERIFY(!cooling->tabBar()->isVisible());}if(!output.isEmpty()) QVERIFY(window.grab().save(output+"/"+names[i]+".png"));}
     if(!output.isEmpty()) {
       navigation->setCurrentRow(1);QTest::qWait(350);
       for(auto *scroll:window.findChild<QTabWidget*>("pages")->widget(1)->findChildren<QScrollArea*>()) scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
@@ -461,6 +521,17 @@ private slots:
       QVERIFY(window.grab().save(output+"/keyboard-selected.png"));
       QColorDialog dialog(QColor("#EF00D8"),&window);dialog.setOption(QColorDialog::DontUseNativeDialog,true);dialog.show();QTest::qWait(100);
       QVERIFY(dialog.grab().save(output+"/color-dialog.png"));dialog.reject();
+    }
+    if(!output.isEmpty()) {
+      navigation->setCurrentRow(0);QTest::qWait(350);
+      auto *center=window.findChild<ucc::NotificationCenter*>();QVERIFY(center);center->clearAll();
+      center->addEvent("Keyboard and Hardware","Keyboard profile 'Main' saved");
+      center->addEvent("Profiles","Profile 'Custom' saved");
+      center->addEvent("Watercool Settings","Water cooler pump set to 8 V");
+      center->addEvent("Overview","Water cooler fan set to 70%");
+      QTest::mouseClick(window.findChild<QPushButton*>("notificationBell"),Qt::LeftButton);QTest::qWait(100);
+      QVERIFY(center->grab().save(output+"/notifications.png"));
+      QVERIFY(window.grab().save(output+"/notifications-context.png"));center->hide();
     }
     window.resize(1024,768);
     for(int i=0;i<6;++i){navigation->setCurrentRow(i);QTest::qWait(350);QVERIFY(window.width()<=1024);if(!output.isEmpty()) QVERIFY(window.grab().save(output+"/"+names[i]+"-small.png"));}

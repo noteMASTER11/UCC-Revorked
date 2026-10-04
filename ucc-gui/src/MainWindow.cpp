@@ -15,6 +15,7 @@
 
 #include "MainWindow.hpp"
 #include "FluentTheme.hpp"
+#include "NotificationCenter.hpp"
 #include "FluentSidebar.hpp"
 #include "FluentEntrance.hpp"
 #include "PreviewMode.hpp"
@@ -41,6 +42,21 @@
 #include <QJsonArray>
 #include <algorithm>
 #include <optional>
+
+namespace {
+QLabel *addSidebarStatusRow(QVBoxLayout *layout, QLabel *text, const QString &marker = {},
+                           const QString &status = "muted") {
+  auto *row = new QWidget;
+  auto *line = new QHBoxLayout(row);
+  line->setContentsMargins(0,0,0,0);line->setSpacing(8);
+  auto *indicator = new QLabel(marker);
+  indicator->setObjectName("sidebarStatusIndicator");indicator->setFixedWidth(12);
+  indicator->setAlignment(Qt::AlignLeft | Qt::AlignTop);indicator->setProperty("status",status);
+  text->setObjectName("sidebarStatusText");text->setWordWrap(true);
+  line->addWidget(indicator);line->addWidget(text,1);layout->addWidget(row);
+  return indicator;
+}
+}
 
 // Helper widget for rotated y-axis label
 class RotatedLabel : public QLabel
@@ -137,10 +153,9 @@ MainWindow::MainWindow( QWidget *parent )
   if ( m_waterCoolerSupported )
   {
     m_waterCoolerStatusBarLabel = new QLabel( this );
-    m_waterCoolerStatusBarLabel->setTextFormat( Qt::RichText );
+    m_waterCoolerStatusBarLabel->setTextFormat( Qt::PlainText );
     m_waterCoolerStatusBarLabel->setWordWrap(true);
-    m_waterCoolerStatusBarLabel->setObjectName("muted");
-    statusLayout->addWidget(m_waterCoolerStatusBarLabel);
+    addSidebarStatusRow(statusLayout,m_waterCoolerStatusBarLabel,"●","accent");
 
     connect( m_dashboardTab, &DashboardTab::waterCoolerStatusChanged,
              m_waterCoolerStatusBarLabel, &QLabel::setText );
@@ -149,9 +164,8 @@ MainWindow::MainWindow( QWidget *parent )
   }
 
   m_connectionLabel = new QLabel( this );
-  m_connectionLabel->setTextFormat( Qt::RichText );
-  m_connectionLabel->setWordWrap(true);m_connectionLabel->setObjectName("activeProfileStatus");
-  statusLayout->addWidget(m_connectionLabel);
+  m_connectionLabel->setTextFormat( Qt::PlainText );
+  addSidebarStatusRow(statusLayout,m_connectionLabel);
   statusBar()->hide();
   // Set initial connection state
   onUccdConnectionChanged( m_UccdClient->isConnected() );
@@ -234,16 +248,15 @@ void MainWindow::setupUI()
   for(const auto &label:labels) new QListWidgetItem(FluentTheme::icon(label),label,navigation);
   sideLayout->addWidget(navigation,1);
   auto *footer=new QWidget(sidebar);footer->setObjectName("sidebarFooter");
-  auto *statusLayout=new QVBoxLayout(footer);statusLayout->setObjectName("sidebarStatusLayout");statusLayout->setContentsMargins(12,16,12,0);statusLayout->setSpacing(10);
+  auto *statusLayout=new QVBoxLayout(footer);statusLayout->setObjectName("sidebarStatusLayout");statusLayout->setContentsMargins(12,16,12,0);statusLayout->setSpacing(8);
   if(readOnlyPreview) {
     auto *badge=new QLabel("Read-only preview",footer);badge->setObjectName("previewBadge");
     badge->setToolTip("Hardware and settings commands are blocked in this build.");statusLayout->addWidget(badge);
   }
-  auto *connection=new QLabel(footer);connection->setWordWrap(true);statusLayout->addWidget(connection);
-  auto *message=new QLabel(footer);message->setObjectName("muted");message->setWordWrap(true);message->hide();statusLayout->addWidget(message);
-  connect(statusBar(),&QStatusBar::messageChanged,message,[message](const QString &text){const bool show=!text.isEmpty() && text!="Ready";message->setText(show ? text : QString());message->setVisible(show);});
+  auto *connection=new QLabel(footer);
+  auto *connectionIndicator=addSidebarStatusRow(statusLayout,connection,"●");
   sideLayout->addWidget(footer);
-  auto updateSidebar=[connection](bool connected){connection->setText(connected ? "●  Service connected" : "○  Service unavailable");connection->setProperty("status",connected ? "success" : "muted");connection->style()->unpolish(connection);connection->style()->polish(connection);};
+  auto updateSidebar=[connection,connectionIndicator](bool connected){connection->setText(connected ? "Service connected" : "Service unavailable");connectionIndicator->setText(connected ? "●" : "○");connectionIndicator->setProperty("status",connected ? "success" : "muted");connectionIndicator->style()->unpolish(connectionIndicator);connectionIndicator->style()->polish(connectionIndicator);};
   updateSidebar(m_UccdClient->isConnected());
   connect(m_UccdClient.get(),&UccdClient::connectionStatusChanged,sidebar,updateSidebar);
   shellLayout->addWidget(sidebar);
@@ -253,6 +266,14 @@ void MainWindow::setupUI()
   auto *headerRow=new QHBoxLayout;headerRow->addWidget(heading,1);
   auto *themeToggle=new QPushButton(content);themeToggle->setObjectName("themeToggle");themeToggle->setFixedSize(36,34);themeToggle->setIconSize(QSize(22,22));themeToggle->setStyleSheet("padding: 5px;");
   themeToggle->setAccessibleName("Interface theme");
+  auto *notificationBell=new QPushButton(content);notificationBell->setObjectName("notificationBell");
+  notificationBell->setFixedSize(36,34);notificationBell->setIconSize(QSize(22,22));notificationBell->setStyleSheet("padding: 5px;");
+  auto *notifications=new NotificationCenter(notificationBell,this);
+  headerRow->addWidget(notificationBell,0,Qt::AlignTop);
+  connect(statusBar(),&QStatusBar::messageChanged,notifications,[notifications,navigation](const QString &message){
+    const int row=navigation->currentRow();
+    notifications->addEvent(row>=0 ? navigation->item(row)->text() : QStringLiteral("UCC"),message);
+  });
   headerRow->addWidget(themeToggle,0,Qt::AlignTop);contentLayout->addLayout(headerRow);
   auto refreshTheme=[themeToggle,navigation,sidebar]{
     themeToggle->setIcon(FluentTheme::icon(FluentTheme::modeLabel()));
@@ -955,6 +976,17 @@ void MainWindow::connectSignals()
   connect( m_profileManager.get(), &ProfileManager::allProfilesChanged,
            this, &MainWindow::onAllProfilesChanged );
 
+  const auto manualCoolerChanged = [this](bool automatic, const QString &message) {
+    if (m_currentLoadedProfile == m_profileManager->activeProfileId()) {
+      const QSignalBlocker blocker(m_autoWaterControlCheckBox);
+      m_autoWaterControlCheckBox->setChecked(automatic);
+      m_fanControlTab->setWaterCoolerAutoControl(automatic);
+    }
+    statusBar()->showMessage(message,5000);
+  };
+  connect(m_dashboardTab, &DashboardTab::waterCoolerManualChanged, this, manualCoolerChanged);
+  connect(m_fanControlTab, &FanControlTab::waterCoolerManualChanged, this, manualCoolerChanged);
+
   connect( m_profileManager.get(), &ProfileManager::activeProfileIndexChanged,
            this, &MainWindow::onActiveProfileIndexChanged );
 
@@ -1538,7 +1570,7 @@ void MainWindow::updateConnectionStatusLabel()
     profileName = QStringLiteral( "Unknown" );
 
   m_connectionLabel->setText(
-    QString("Profile: <b>%1</b>").arg(profileName.toHtmlEscaped()) );
+    QString("Profile: %1").arg(profileName) );
 }
 
 void MainWindow::onActiveProfileIndexChanged()
@@ -1722,6 +1754,14 @@ void MainWindow::loadProfileDetails( const QString &profileId )
   }
 
   QJsonObject obj = doc.object();
+  if (profileId == m_profileManager->activeProfileId()) {
+    if (auto runtime = m_UccdClient->getActiveProfileJSON()) {
+      const auto runtimeFan = QJsonDocument::fromJson(QByteArray::fromStdString(*runtime)).object()["fan"].toObject();
+      if (runtimeFan.contains("autoControlWC")) {
+        auto fan = obj["fan"].toObject();fan["autoControlWC"] = runtimeFan["autoControlWC"];obj["fan"] = fan;
+      }
+    }
+  }
   // Block signals while updating to avoid triggering slot updates
   m_brightnessSlider->blockSignals( true );
   m_setBrightnessCheckBox->blockSignals( true );
@@ -2273,6 +2313,16 @@ QString MainWindow::buildProfileJSON() const
       if ( fp.contains( "tableWaterCoolerFan" ) ) fanObj["tableWaterCoolerFan"] = fp["tableWaterCoolerFan"];
     }
   }
+  // Carry manual settings from the running profile, or the selected saved profile.
+  QJsonObject sourceFan;
+  if (m_currentLoadedProfile == m_profileManager->activeProfileId()) {
+    if (auto runtime = m_UccdClient->getActiveProfileJSON())
+      sourceFan = QJsonDocument::fromJson(QByteArray::fromStdString(*runtime)).object()["fan"].toObject();
+  } else {
+    sourceFan = QJsonDocument::fromJson(m_profileManager->getProfileDetails(m_currentLoadedProfile).toUtf8()).object()["fan"].toObject();
+  }
+  fanObj["manualFanSpeed"] = sourceFan.value("manualFanSpeed").toInt(-1);
+  fanObj["manualPumpVoltage"] = sourceFan.value("manualPumpVoltage").toInt(-1);
   fanObj["fanProfile"]       = fanProfileId;
   fanObj["sameSpeed"]        = m_sameFanSpeedCheckBox   ? m_sameFanSpeedCheckBox->isChecked()   : true;
   fanObj["autoControlWC"]    = m_autoWaterControlCheckBox ? m_autoWaterControlCheckBox->isChecked() : true;

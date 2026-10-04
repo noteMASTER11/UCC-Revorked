@@ -59,6 +59,16 @@ private:
   }
 
 private slots:
+  void manualWaterCoolerRoundTrip() {
+    auto legacy = ProfileManager::parseProfileJSON(minimalJSON());
+    QCOMPARE(legacy.fan.manualFanSpeed,-1);QCOMPARE(legacy.fan.manualPumpVoltage,-1);
+    legacy.fan.autoControlWC=false;legacy.fan.manualFanSpeed=70;legacy.fan.manualPumpVoltage=3;
+    auto restored = ProfileManager::parseProfileJSON(ProfileManager::profileToJSON(legacy));
+    QVERIFY(!restored.fan.autoControlWC);QCOMPARE(restored.fan.manualFanSpeed,70);QCOMPARE(restored.fan.manualPumpVoltage,3);
+    legacy.fan.manualFanSpeed=101;legacy.fan.manualPumpVoltage=1;
+    restored = ProfileManager::parseProfileJSON(ProfileManager::profileToJSON(legacy));
+    QCOMPARE(restored.fan.manualFanSpeed,-1);QCOMPARE(restored.fan.manualPumpVoltage,-1);
+  }
 
   // parseProfileJSON() - field extraction
 

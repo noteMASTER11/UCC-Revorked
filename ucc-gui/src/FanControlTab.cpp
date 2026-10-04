@@ -553,20 +553,20 @@ void FanControlTab::onPumpVoltageChanged( int index )
 {
   if (readOnlyPreview) return;
   if ( !m_waterCoolerDbus ) return;
-  if ( index == static_cast< int >( PumpVoltage::Off ) )
-    m_waterCoolerDbus->call( QStringLiteral( "TurnOffWaterCoolerPump" ) );
-  else
-  {
-    PumpVoltage voltage = static_cast< PumpVoltage >( m_pumpVoltageCombo->itemData( index ).toInt() );
-    m_waterCoolerDbus->call( QStringLiteral( "SetWaterCoolerPumpVoltage" ), static_cast< int >( voltage ) );
-  }
+  if (index < 0) return;
+  const int voltage = m_pumpVoltageCombo->itemData(index).toInt();
+  QDBusReply<bool> reply = m_waterCoolerDbus->call(QStringLiteral("SetWaterCoolerPumpVoltage"),voltage);
+  if (reply.isValid() && reply.value())
+    emit waterCoolerManualChanged(false,"Water cooler pump set to "+m_pumpVoltageCombo->itemText(index));
 }
 
 void FanControlTab::onFanSpeedChanged( int speed )
 {
   if (readOnlyPreview) return;
   if ( !m_waterCoolerDbus ) return;
-  m_waterCoolerDbus->call( QStringLiteral( "SetWaterCoolerFanSpeed" ), speed );
+  QDBusReply<bool> reply = m_waterCoolerDbus->call(QStringLiteral("SetWaterCoolerFanSpeed"),speed);
+  if (reply.isValid() && reply.value())
+    emit waterCoolerManualChanged(false,QString("Water cooler fan set to %1%").arg(speed));
 }
 
 void FanControlTab::onLEDOnOffChanged( bool enabled )

@@ -9,7 +9,7 @@
 
 // Test-only demonstration data for rendering; never linked into ucc-gui.
 inline std::optional<QVariant> visualFixtureReply(const QString &method) {
-  const QString profiles=R"([{"id":"quiet","name":"Quiet","description":"Low noise"},{"id":"balanced","name":"Balanced","description":"Everyday work and browsing","odmPowerLimits":{"tdpValues":[65,90,110]}},{"id":"performance","name":"Performance","description":"Maximum performance"}])";
+  const QString profiles=R"([{"id":"quiet","name":"Quiet","description":"Low noise"},{"id":"balanced","name":"Balanced","description":"Everyday work and browsing","fan":{"autoControlWC":false,"sameSpeed":true,"enableWaterCooler":true,"fanProfile":"balanced-cooling"},"odmPowerLimits":{"tdpValues":[65,90,110]}},{"id":"performance","name":"Performance","description":"Maximum performance"}])";
   const QString fan=R"({"id":"balanced-cooling","name":"Balanced cooling","tableCPU":[{"temp":30,"speed":0},{"temp":40,"speed":10},{"temp":50,"speed":25},{"temp":60,"speed":40},{"temp":70,"speed":55},{"temp":80,"speed":75},{"temp":90,"speed":90},{"temp":100,"speed":100}],"tableGPU":[{"temp":30,"speed":0},{"temp":40,"speed":10},{"temp":50,"speed":25},{"temp":60,"speed":40},{"temp":70,"speed":55},{"temp":80,"speed":75},{"temp":90,"speed":90},{"temp":100,"speed":100}]})";
   if(method=="GetSystemInfoJSON") return QString(R"({"laptopModel":"MECHREVO YAOSHI Series-X6AR55xY","cpuModel":"Intel Core Ultra 9 275HX","dGpuModel":"NVIDIA GeForce RTX 5080 Laptop GPU"})");
   if(method=="GetDefaultProfilesJSON") return profiles;
