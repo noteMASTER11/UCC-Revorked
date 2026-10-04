@@ -23,6 +23,7 @@
 #include "PreviewMode.hpp"
 #include "FluentTheme.hpp"
 #include "GuiInstance.hpp"
+#include "AppLogging.hpp"
 #include "SystemMonitor.hpp"
 #include "UccdClient.hpp"
 #include "version.h"
@@ -78,7 +79,6 @@ int main( int argc, char *argv[] )
   }
 
   QApplication app( argc, argv );
-  ucc::FluentTheme::apply(app);
   app.setDesktopFileName("ucc-gui");
   app.setOrganizationName( "UniwillControlCenter" );
   app.setOrganizationDomain( "uniwill.local" );
@@ -89,6 +89,10 @@ int main( int argc, char *argv[] )
   const auto instanceResult = instance.startOrActivate();
   if (instanceResult != ucc::GuiInstance::Result::Primary)
     return instanceResult == ucc::GuiInstance::Result::ActivatedExisting ? 0 : 1;
+
+  ucc::AppLogging::initialize();
+  QObject::connect(&app,&QCoreApplication::aboutToQuit,&app,[] {ucc::AppLogging::shutdown();});
+  ucc::FluentTheme::apply(app);
 
   // ensure window decorations and the application use the theme icon we installed
   app.setWindowIcon( QIcon::fromTheme( "ucc-gui" ) );

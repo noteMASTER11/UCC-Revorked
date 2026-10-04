@@ -17,6 +17,7 @@
 #include "FluentTheme.hpp"
 #include "NotificationCenter.hpp"
 #include "AboutPage.hpp"
+#include "AppLogging.hpp"
 #include "FluentSidebar.hpp"
 #include "FluentEntrance.hpp"
 #include "PreviewMode.hpp"
@@ -273,7 +274,10 @@ void MainWindow::setupUI()
   headerRow->addWidget(notificationBell,0,Qt::AlignTop);
   connect(statusBar(),&QStatusBar::messageChanged,notifications,[notifications,navigation](const QString &message){
     const int row=navigation->currentRow();
-    notifications->addEvent(row>=0 ? navigation->item(row)->text() : QStringLiteral("UCC"),message);
+    const QString section=row>=0 ? navigation->item(row)->text() : QStringLiteral("UCC");
+    notifications->addEvent(section,message);
+    if(AppLogging::isEnabled() && !message.trimmed().isEmpty() && message!="Ready")
+      qInfo().noquote()<<"[UI]"<<section<<message;
   });
   headerRow->addWidget(themeToggle,0,Qt::AlignTop);contentLayout->addLayout(headerRow);
   auto refreshTheme=[themeToggle,navigation,sidebar]{

@@ -20,6 +20,8 @@
 #include "FanControlTab.hpp"
 #include "NotificationCenter.hpp"
 #include "version.h"
+#include "AppLogging.hpp"
+#include <QDesktopServices>
 #include <QTextBrowser>
 #include "MainWindow.hpp"
 #include "FluentTheme.hpp"
@@ -81,6 +83,10 @@ public:
 class GuiAudit : public QObject {
   Q_OBJECT
   QProcess daemon;
+  QUrl openedLogDirectory;
+public slots:
+  void captureLogDirectory(const QUrl &url) {openedLogDirectory=url;}
+private:
   std::unique_ptr<ucc::UccdClient> client;
   std::unique_ptr<ucc::ProfileManager> profiles;
   QVariant control(const QString &method,QVariantList args={}) {
@@ -442,6 +448,30 @@ private slots:
     QTest::qWait(300);QVERIFY(!overlay->isVisible());
     QCOMPARE(QApplication::focusWidget(),focused);
     QVERIFY(stats().value("writes").toArray().isEmpty());
+  }
+  void aboutLoggingPreferenceAndFolderAction() {
+    control("TestVisualFixture");ucc::MainWindow window;window.resize(1024,768);window.show();
+    window.findChild<QListWidget*>("navigation")->setCurrentRow(6);
+    auto *page=window.findChild<QScrollArea*>("aboutPage");QVERIFY(page);page->verticalScrollBar()->setValue(page->verticalScrollBar()->maximum());QTest::qWait(300);
+    auto *toggle=page->findChild<QCheckBox*>("saveApplicationLogs");auto *open=page->findChild<QPushButton*>("openLogsDirectory");QVERIFY(toggle);QVERIFY(open);
+    QCOMPARE(toggle->parentWidget()->objectName(),QString("card"));
+    QCOMPARE(page->findChild<QLabel*>("logsDirectoryPath")->font().pixelSize(),12);
+    QCOMPARE(page->findChild<QLabel*>("logsDirectoryPath")->text(),ucc::AppLogging::directory());
+    QCOMPARE(page->horizontalScrollBar()->maximum(),0);
+#ifdef UCC_READ_ONLY_PREVIEW
+    QVERIFY(!toggle->isEnabled());QVERIFY(!open->isEnabled());
+    QVERIFY(QMetaObject::invokeMethod(open,"clicked",Q_ARG(bool,false)));
+    QVERIFY(QMetaObject::invokeMethod(toggle,"toggled",Q_ARG(bool,true)));
+    QVERIFY(!ucc::AppLogging::isEnabled());QVERIFY(!QDir(ucc::AppLogging::directory()).exists());
+#else
+    QVERIFY(toggle->isEnabled());QTest::mouseClick(toggle,Qt::LeftButton);QVERIFY(ucc::AppLogging::isEnabled());
+    QVERIFY(QSettings("UniwillControlCenter","diagnostics").value("saveLogs").toBool());
+    QTest::mouseClick(toggle,Qt::LeftButton);QVERIFY(!ucc::AppLogging::isEnabled());
+    QDesktopServices::setUrlHandler("file",this,"captureLogDirectory");
+    const auto restore=qScopeGuard([] {QDesktopServices::unsetUrlHandler("file");});
+    QTest::mouseClick(open,Qt::LeftButton);QCOMPARE(openedLogDirectory,QUrl::fromLocalFile(ucc::AppLogging::directory()));
+#endif
+    window.hide();QVERIFY(stats().value("writes").toArray().isEmpty());
   }
   void aboutBuildCreditsAndBundledLicense() {
     control("TestVisualFixture");ucc::MainWindow window;window.resize(1024,768);window.show();

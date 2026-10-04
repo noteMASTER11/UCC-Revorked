@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "AboutPage.hpp"
+#include "AppLogging.hpp"
+#include "PreviewMode.hpp"
+#include <QCheckBox>
+#include <QDir>
+#include <QSignalBlocker>
 #include "FluentTheme.hpp"
 #include "version.h"
 #include <QDialog>
@@ -113,6 +118,30 @@ QWidget *createAboutPage(QWidget *parent) {
   auto *notices = new QPushButton("Third-party notices",dependencies);notices->setObjectName("aboutNotices");
   QObject::connect(notices,&QPushButton::clicked,dependencies,[dependencies] {showDocument(dependencies,"Open-source acknowledgements",":/legal/THIRD_PARTY.md",true);});components->addWidget(notices,0,Qt::AlignLeft);
   layout->addWidget(text("Fluent-inspired design, implemented in Qt. An independent community project; no Microsoft Fluent UI library is bundled.","muted"));
+  layout->addWidget(text("Diagnostics","cardTitle"));
+  auto *diagnostics=card(layout);diagnostics->setProperty("diagnostics",true);
+  auto *loggingLayout=qobject_cast<QVBoxLayout*>(diagnostics->layout());
+  auto *loggingRow=new QHBoxLayout;loggingRow->setSpacing(16);
+  auto *saveLogs=new QCheckBox("Save application logs (DEBUG and above)");saveLogs->setObjectName("saveApplicationLogs");
+  saveLogs->setChecked(AppLogging::isEnabled());saveLogs->setEnabled(!readOnlyPreview);loggingRow->addWidget(saveLogs,1);
+  auto *openLogs=new QPushButton("Open logs folder");openLogs->setObjectName("openLogsDirectory");openLogs->setEnabled(!readOnlyPreview);loggingRow->addWidget(openLogs);loggingLayout->addLayout(loggingRow);
+  loggingLayout->addWidget(text("Reproduce the issue, then attach the newest .log file to your bug report. Files include the build version and message timestamps.","muted"));
+  auto *path=text(AppLogging::directory(),"muted");path->setObjectName("logsDirectoryPath");loggingLayout->addWidget(path);
+  auto *loggingStatus=text(AppLogging::isEnabled() ? "Logging enabled. Files rotate at 5 MiB; the latest 10 are kept." : "Logging disabled. Files rotate at 5 MiB; the latest 10 are kept.","muted");loggingStatus->setObjectName("loggingStatus");loggingLayout->addWidget(loggingStatus);
+  if(readOnlyPreview) saveLogs->setToolTip("File logging is disabled in the read-only preview.");
+  QObject::connect(saveLogs,&QCheckBox::toggled,diagnostics,[saveLogs,loggingStatus](bool enabled) {
+    if(!AppLogging::setEnabled(enabled)) {
+      const QSignalBlocker blocker(saveLogs);saveLogs->setChecked(AppLogging::isEnabled());
+      loggingStatus->setText("Could not enable logging: "+AppLogging::lastError());return;
+    }
+    loggingStatus->setText(enabled ? "Logging enabled. Reproduce the issue and share the newest log file." : "Logging disabled. Existing files remain in the logs folder.");
+  });
+  QObject::connect(openLogs,&QPushButton::clicked,diagnostics,[loggingStatus] {
+    if(readOnlyPreview) return;
+    const auto folder=AppLogging::directory();
+    if(!QDir().mkpath(folder) || !QDesktopServices::openUrl(QUrl::fromLocalFile(folder)))
+      loggingStatus->setText("Could not open the logs directory: "+folder);
+  });
   layout->addStretch();scroll->setWidget(content);return scroll;
 }
 }

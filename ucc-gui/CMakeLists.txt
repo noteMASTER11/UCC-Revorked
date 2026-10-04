@@ -31,6 +31,7 @@ set( UCC_GUI_SOURCES
   resources/fluent.qrc
     resources/legal.qrc
     src/AboutPage.cpp inc/AboutPage.hpp
+    src/AppLogging.cpp inc/AppLogging.hpp
   src/NotificationCenter.cpp inc/NotificationCenter.hpp
   src/FluentEntrance.cpp inc/FluentEntrance.hpp
   src/FluentSidebar.cpp

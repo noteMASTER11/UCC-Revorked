@@ -76,6 +76,7 @@ if(DBUS_RUN_SESSION_EXECUTABLE AND BUILD_GUI)
     ../ucc-gui/resources/fluent.qrc
     ../ucc-gui/resources/legal.qrc
     ../ucc-gui/src/AboutPage.cpp ../ucc-gui/inc/AboutPage.hpp
+    ../ucc-gui/src/AppLogging.cpp ../ucc-gui/inc/AppLogging.hpp
     ../ucc-gui/src/NotificationCenter.cpp ../ucc-gui/inc/NotificationCenter.hpp
     ../ucc-gui/src/FluentEntrance.cpp
     ../ucc-gui/src/FluentSidebar.cpp
@@ -107,4 +108,13 @@ if(DBUS_RUN_SESSION_EXECUTABLE AND BUILD_GUI)
   target_include_directories(test_system_monitor PRIVATE ../ucc-gui/inc ../include)
   target_link_libraries(test_system_monitor PRIVATE ucc-dbus Qt6::Core Qt6::Test)
   add_test(NAME test_system_monitor COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- bash ${CMAKE_CURRENT_SOURCE_DIR}/run_private_system_bus.sh $<TARGET_FILE:test_system_monitor>)
+endif()
+
+if(BUILD_GUI)
+  ucc_add_test(test_app_logging test_app_logging.cpp)
+  target_sources(test_app_logging PRIVATE ../ucc-gui/src/AppLogging.cpp)
+  target_include_directories(test_app_logging PRIVATE ../ucc-gui/inc ../libucc-dbus)
+  if(UCC_READ_ONLY_PREVIEW)
+    target_compile_definitions(test_app_logging PRIVATE UCC_READ_ONLY_PREVIEW)
+  endif()
 endif()
